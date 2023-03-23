@@ -1,0 +1,39 @@
+model:
+  diffusion:
+    params:
+      timesteps: 1000
+      sampling_timesteps: 250
+      loss_type: "l2"
+      objective: "pred_noise"
+      beta_schedule: "cosine"
+      dim_head: 64
+      p2_loss_weight_k: 1
+      p2_loss_weight_gamma: 0.0
+      ddim_sampling_eta: 1.0
+      normalize_latent: True
+      scale_factor: 0.121005
+      scale_mean: 0.002565
+      use_ema: True
+      self_condition: True
+      enc_dec_model: "huggingface/bart-base"
+      tx_depth: 6
+      unconditional_prob: 0.1
+  transformer:
+    latent_dim: 768
+    attention_head_dim: 64
+data:
+  name: "qqp"
+  params:
+    tokenizer: "huggingface/bart-base"
+    max_token_len: 64
+    batch_size: 256
+    num_workers: 4
+train:
+  name: ""
+  output_dir: "saved_models"
+  params:
+    precision: 32
+    learning_rate: 1.0e-4
+    lr_warmup_steps: 0
+    num_train_steps: 60000
+    accumulate_grad_batches: 1
