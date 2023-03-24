@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
-from einops import repeat, rearrange
+from einops import rearrange
 
 from ld4pg.model.x_transformer import LDEncoder
 from ld4pg.module.pos_emb import SinusoidalPositionalEmbedding, AbsolutePositionalEmbedding
-from ld4pg.utils import init_zero_, exists
+from ld4pg.utils import init_zero_
 
 
 class DiffusionTransformer(nn.Module):
@@ -72,9 +72,9 @@ class DiffusionTransformer(nn.Module):
             time_emb_dim=tx_dim * 4 if self.scale_shift else None,
         )
         # null embedding 来表示没有self-condition的前一步输入信息
-        if self_condition:
-            self.null_embedding = nn.Embedding(1, tx_dim)
-            self.context_proj = nn.Linear(latent_dim, tx_dim)
+        # if self_condition:
+        #     self.null_embedding = nn.Embedding(1, tx_dim)
+        #     self.context_proj = nn.Linear(latent_dim, tx_dim)
 
         self.input_proj = nn.Linear(latent_dim, tx_dim)
         self.norm = nn.LayerNorm(tx_dim)

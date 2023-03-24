@@ -229,10 +229,16 @@ class Trainer(object):
             text = []
             while len(text) < num_samples_per_class:
                 batches = num_to_groups(num_samples_per_class - len(text), self.eval_batch_size)
-                model_outputs = list(map(lambda n: tuple(x.to('cpu') for x in
-                                                         self.ema.ema_model.sample(batch_size=n, length=self.length_categorical.sample((n,)),
-                                                                                   class_id=torch.tensor([class_id] * n, dtype=torch.long,
-                                                                                                         device=device))), batches))
+                model_outputs = list(
+                    map(lambda n: tuple(
+                        x.to('cpu')
+                        for x in self.ema.ema_model.sample(
+                            batch_size=n,
+                            length=self.length_categorical.sample((n,)),
+                            class_id=torch.tensor([class_id] * n, dtype=torch.long, device=device)
+                        )
+                    ), batches)
+                )
 
                 for (latents, mask) in model_outputs:
                     latents, mask = latents.to(device), mask.to(device)

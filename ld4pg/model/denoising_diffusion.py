@@ -1,14 +1,16 @@
 import random
-from omegaconf import DictConfig
 from contextlib import contextmanager
+from typing import Optional
 
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from rich.progress import track
+from omegaconf import DictConfig
+from tqdm import tqdm
 # from einops import reduce, rearrange
 from transformers import BartForConditionalGeneration, BartTokenizer
 from transformers import get_scheduler
+from transformers.modeling_outputs import BaseModelOutput
 
 from ld4pg.config import *
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
@@ -30,11 +32,14 @@ def get_beta_schedule(beta_schedule, timesteps):
 
 
 class GaussianDiffusion(pl.LightningModule):
+    # todo: 把bart-model放到外面去
+    # todo: 单独传一个semantic-encoder进来
     def __init__(
             self,
             model: DiffusionTransformer,
             cfg: DictConfig,
-            max_seq_len,
+            max_seq_len=64,
+            # enc_dec_model: PreTrainedModel = None,
             timesteps=1000,
             sampling_timesteps=None,
             loss_type='l2',
@@ -48,8 +53,8 @@ class GaussianDiffusion(pl.LightningModule):
             use_ema: bool = True,
     ):
         super().__init__()
-        self.save_hyperparameters()
-        self.args = cfg
+        self.save_hyperparameters(ignore=["model", "enc_dec_model"])
+        self.cfg = cfg
 
         # sampling related parameters
         self.num_timesteps = int(timesteps)
@@ -58,6 +63,7 @@ class GaussianDiffusion(pl.LightningModule):
 
         enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.enc_dec_model)
         self.tokenizer = BartTokenizer.from_pretrained(cfg.enc_dec_model)
+        # self.enc_dec_model = enc_dec_model
         self.encoder = enc_dec_model.get_encoder()
         self.decoder = enc_dec_model.get_decoder()
         self.semantic_encoder = self.encoder
@@ -103,7 +109,10 @@ class GaussianDiffusion(pl.LightningModule):
         alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.)
 
         # helper function to register buffer from float64 to float32
-        register_buffer = lambda name, val: self.register_buffer(name, val.to(torch.float32))
+        # register_buffer = lambda name, val: self.register_buffer(name, val.to(torch.float32))
+        def register_buffer(name, val: Optional[torch.Tensor]):
+            self.register_buffer(name, val.to(torch.float32))
+
         register_buffer('betas', betas)
         register_buffer('alphas_cumprod', alphas_cumprod)
         register_buffer('alphas_cumprod_prev', alphas_cumprod_prev)
@@ -150,12 +159,12 @@ class GaussianDiffusion(pl.LightningModule):
 
         # 从高斯噪声中 sample 一个样本, size 是 bsz x max_seqlen x dim
         batch_size = condition.shape[0]
-        latent = torch.randn(batch_size, self.max_seq_len, self.latent_dim)
-        mask = [[True] * self.max_seq_len for _ in batch_size]
+        latent = torch.randn(batch_size, self.max_seq_len, self.latent_dim).to(self.device)
+        mask = torch.tensor([[True] * self.max_seq_len for _ in range(batch_size)], dtype=torch.bool, device=self.device)
 
         x_start = None
-        for time, time_next in track(time_pairs, description='sampling loop'):
-            time_cond = torch.full((batch_size,), time, dtype=torch.long)
+        for time, time_next in tqdm(time_pairs, desc="Sampling"):
+            time_cond = torch.full((batch_size,), time, dtype=torch.long, device=self.device)
             # 通过 self-condition 实现从 T 到 T-1的采样过程
             self_cond = x_start if self.self_condition else None
             pred_noise, x_start = self.diffusion_model_predictions(latent, mask, time_cond, condition, condition_mask, self_cond)
@@ -294,11 +303,19 @@ class GaussianDiffusion(pl.LightningModule):
         self.log_dict(loss_dict_ema, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
 
     @torch.no_grad()
-    def test_step(self, batch, batch_idx):
-        pass
+    def predict_step(self, batch, batch_idx):
+        src = batch['source_text_input_ids']
+        mask = batch['source_text_attention_mask']
+        condition = self.semantic_encoder(src, attention_mask=mask).last_hidden_state
+
+        latent, latent_mask = self.sample(condition=condition, condition_mask=mask)
+        encoder_outputs = BaseModelOutput(
+            last_hidden_state=latent.clone(),
+        )
+        return encoder_outputs, latent_mask
 
     def configure_optimizers(self):
-        # 这里只优化 diffusion model 和 均值 / 方差
+        # 这里只优化 diffusion model
         optimizer = get_adamW_optimizer(
             self.diffusion_model.parameters(),
             lr=self.learning_rate,
