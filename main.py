@@ -73,7 +73,7 @@ def build_denoise_network(cfg: DictConfig):
 def build_model(cfg: DictConfig):
     model = build_denoise_network(cfg)
     diffusion_cfg = cfg.diffusion.params
-    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
+    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model).get_encoder()
     diffusion = GaussianDiffusion(
         model,
         encoder,
@@ -93,7 +93,7 @@ def build_model(cfg: DictConfig):
 def load_model(cfg: DictConfig, ckpt: str):
     model = build_denoise_network(cfg)
     diffusion_cfg = cfg.diffusion.params
-    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
+    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model).get_encoder()
     diffusion = GaussianDiffusion.load_from_checkpoint(
         ckpt,
         model=model,

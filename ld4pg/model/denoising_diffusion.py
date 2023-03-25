@@ -53,7 +53,7 @@ class GaussianDiffusion(pl.LightningModule):
             use_ema: bool = True,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["model", "enc_dec_model"])
+        self.save_hyperparameters(ignore=["model", "encoder"])
         self.cfg = cfg
 
         # sampling related parameters
