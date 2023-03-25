@@ -15,7 +15,7 @@ from ld4pg.dataset.data_module import get_dataset, DataModule
 from ld4pg.model.denoising_diffusion import GaussianDiffusion
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
 
-FAST_DEV_RUN = True
+FAST_DEV_RUN = False
 CPU_TEST = False
 
 
@@ -64,7 +64,7 @@ def build_denoise_network(cfg: DictConfig):
         self_condition=cfg.params.self_condition,
         scale_shift=cfg.scale_shift,
         dropout=transformer_cfg.dropout,
-        conditional=cfg.params.self_condition,
+        conditional=True,
         unconditional_prob=cfg.params.unconditional_prob,
     )
     return model
