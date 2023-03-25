@@ -1,7 +1,7 @@
 model:
   params:
     max_seq_len: 64
-    self_condition: True
+    self_condition: False
     unconditional_prob: 0.1
   diffusion:
     params:

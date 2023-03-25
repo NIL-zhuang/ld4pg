@@ -8,11 +8,10 @@ import torch.nn.functional as F
 from omegaconf import DictConfig
 from tqdm import tqdm
 # from einops import reduce, rearrange
-from transformers import BartForConditionalGeneration, BartTokenizer
+from transformers import PreTrainedModel
 from transformers import get_scheduler
 from transformers.modeling_outputs import BaseModelOutput
 
-from ld4pg.config import *
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
 from ld4pg.module.ema import LitEma
 from ld4pg.module.noise_schedule import linear_beta_schedule, cosine_beta_schedule
@@ -37,6 +36,7 @@ class GaussianDiffusion(pl.LightningModule):
     def __init__(
             self,
             model: DiffusionTransformer,
+            encoder: PreTrainedModel,
             cfg: DictConfig,
             max_seq_len=64,
             # enc_dec_model: PreTrainedModel = None,
@@ -61,13 +61,10 @@ class GaussianDiffusion(pl.LightningModule):
         self.sampling_timesteps = default(sampling_timesteps, timesteps)  # default num sampling timesteps to number of timesteps at training
         assert self.sampling_timesteps <= timesteps
 
-        enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.enc_dec_model)
-        self.tokenizer = BartTokenizer.from_pretrained(cfg.enc_dec_model)
-        # self.enc_dec_model = enc_dec_model
-        self.encoder = enc_dec_model.get_encoder()
-        self.decoder = enc_dec_model.get_decoder()
+        # enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.enc_dec_model)
+        self.encoder = encoder
         self.semantic_encoder = self.encoder
-        for f_model in [self.encoder, self.decoder, self.semantic_encoder]:
+        for f_model in [self.encoder, self.semantic_encoder]:
             for p in f_model.parameters():
                 p.requires_grad = False
 
@@ -81,7 +78,8 @@ class GaussianDiffusion(pl.LightningModule):
             self.unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.diffusion_model.unconditional_prob)
 
         self.latent_dim = self.diffusion_model.latent_dim
-        self.self_condition = self.diffusion_model.self_condition
+        # self.self_condition = self.diffusion_model.self_condition
+        self.self_condition = False
 
         self.max_seq_len = max_seq_len
         self.objective = objective
@@ -95,9 +93,10 @@ class GaussianDiffusion(pl.LightningModule):
         self.train_steps = cfg.num_train_steps
 
         self.loss_type = loss_type
-        # self.loss_fn = self.get_loss_fn()
 
         self.normalize = cfg.normalize_latent
+        self.scale_mean = cfg.scale_mean
+        self.scale_factor = cfg.scale_factor
 
         self.register_schedule(beta_schedule, p2_loss_weight_gamma, p2_loss_weight_k, timesteps)
 
@@ -150,7 +149,7 @@ class GaussianDiffusion(pl.LightningModule):
         # return ModelPrediction(pred_noise, x_start)
 
     @torch.no_grad()
-    def ddim_sample(self, condition, condition_mask):
+    def ddim_sample(self, condition, condition_mask, latent_mask):
         # [-1, 0, 1, 2, ..., T-1] when sampling_timesteps == total_timesteps
         times = torch.linspace(-1, self.num_timesteps - 1, steps=self.sampling_timesteps + 1)
         times = list(reversed(times.int().tolist()))
@@ -160,7 +159,8 @@ class GaussianDiffusion(pl.LightningModule):
         # 从高斯噪声中 sample 一个样本, size 是 bsz x max_seqlen x dim
         batch_size = condition.shape[0]
         latent = torch.randn(batch_size, self.max_seq_len, self.latent_dim).to(self.device)
-        mask = torch.tensor([[True] * self.max_seq_len for _ in range(batch_size)], dtype=torch.bool, device=self.device)
+        # mask = torch.tensor([[True] * self.max_seq_len for _ in range(batch_size)], dtype=torch.bool, device=self.device)
+        mask = latent_mask
 
         x_start = None
         for time, time_next in tqdm(time_pairs, desc="Sampling"):
@@ -186,10 +186,14 @@ class GaussianDiffusion(pl.LightningModule):
         return latent, mask
 
     @torch.no_grad()
-    def sample(self, condition=None, condition_mask=None):
+    def sample(self, condition=None, condition_mask=None, latent_mask=None):
         # TODO Create mask that controls length
         # TODO Implement for p_sample_loop
-        return self.ddim_sample(condition, condition_mask)
+        pred_latent, mask = self.ddim_sample(condition, condition_mask, latent_mask)
+
+        if self.normalize:
+            pred_latent = self.denormalize_latent(pred_latent)
+        return pred_latent, mask
 
     def q_sample(self, x_start, t, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -213,7 +217,7 @@ class GaussianDiffusion(pl.LightningModule):
     def p_losses(self, x_start, mask, t, condition, condition_mask, noise=None):
         # 对 x 归一化
         if self.normalize:
-            x_start = normalize_latent(x_start)
+            x_start = self.normalize_latent(x_start)
 
         # noise sample 获取时间步为 t 时刻对应模型的噪声强度
         noise = default(noise, lambda: torch.randn_like(x_start))
@@ -234,8 +238,6 @@ class GaussianDiffusion(pl.LightningModule):
 
         # predict and take gradient step
         pred_noise, pred_x_start = self.diffusion_model_predictions(x_noisy, mask, t, condition, condition_mask, x_self_cond)
-        if self.normalize:
-            pred_x_start = denormalize_latent(pred_x_start)
 
         # 计算最终的 loss，只考虑非mask的部分
         # loss: bsz x max_seqlen x hidden
@@ -308,7 +310,11 @@ class GaussianDiffusion(pl.LightningModule):
         mask = batch['source_text_attention_mask']
         condition = self.semantic_encoder(src, attention_mask=mask).last_hidden_state
 
-        latent, latent_mask = self.sample(condition=condition, condition_mask=mask)
+        latent, latent_mask = self.sample(
+            condition=condition,
+            condition_mask=mask,
+            latent_mask=batch['labels_attention_mask'],
+        )
         encoder_outputs = BaseModelOutput(
             last_hidden_state=latent.clone(),
         )
@@ -344,10 +350,8 @@ class GaussianDiffusion(pl.LightningModule):
         return ((extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0) /
                 extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape))
 
+    def normalize_latent(self, x_start):
+        return (x_start - self.scale_mean) / self.scale_factor
 
-def normalize_latent(x_start):
-    return (x_start - BART_ENCODER_MEAN) / BART_ENCODER_STD
-
-
-def denormalize_latent(x_start):
-    return x_start * BART_ENCODER_STD + BART_ENCODER_MEAN
+    def denormalize_latent(self, x_start):
+        return x_start * self.scale_factor + self.scale_mean

@@ -54,6 +54,7 @@ def build_denoise_network(cfg: DictConfig):
     transformer_cfg = cfg.transformer.params
     assert transformer_cfg.latent_dim % transformer_cfg.attention_head_dim == 0, f'Transformer dimension must be divisible by ATTN_HEAD_DIM'
     assert transformer_cfg.latent_dim == config.d_model, "Transformer latent should be same dimension as encoder latent space"
+
     model = DiffusionTransformer(
         tx_dim=transformer_cfg.latent_dim,
         tx_depth=transformer_cfg.depth,
@@ -72,8 +73,10 @@ def build_denoise_network(cfg: DictConfig):
 def build_model(cfg: DictConfig):
     model = build_denoise_network(cfg)
     diffusion_cfg = cfg.diffusion.params
+    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
     diffusion = GaussianDiffusion(
         model,
+        encoder,
         cfg=cfg.diffusion.params,
         max_seq_len=cfg.params.max_seq_len,
         timesteps=diffusion_cfg.timesteps,  # number of steps
@@ -90,9 +93,11 @@ def build_model(cfg: DictConfig):
 def load_model(cfg: DictConfig, ckpt: str):
     model = build_denoise_network(cfg)
     diffusion_cfg = cfg.diffusion.params
+    encoder = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
     diffusion = GaussianDiffusion.load_from_checkpoint(
         ckpt,
         model=model,
+        encoder=encoder,
         cfg=cfg.diffusion.params,
         max_seq_len=cfg.params.max_seq_len,
         timesteps=diffusion_cfg.timesteps,
