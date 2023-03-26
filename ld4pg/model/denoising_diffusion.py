@@ -62,6 +62,7 @@ class GaussianDiffusion(pl.LightningModule):
         assert self.sampling_timesteps <= timesteps
 
         # enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.enc_dec_model)
+        # build encoder & semantic encoder
         self.encoder = encoder
         self.semantic_encoder = self.encoder
         for f_model in [self.encoder, self.semantic_encoder]:
@@ -168,6 +169,7 @@ class GaussianDiffusion(pl.LightningModule):
             # 通过 self-condition 实现从 T 到 T-1的采样过程
             self_cond = x_start if self.self_condition else None
             pred_noise, x_start = self.diffusion_model_predictions(latent, mask, time_cond, condition, condition_mask, self_cond)
+            # x_start = normalize_latent(x_start)
 
             if time_next < 0:
                 # sample 结束，将 latent 表示为对应的 x_start
@@ -183,6 +185,7 @@ class GaussianDiffusion(pl.LightningModule):
             noise = torch.randn_like(latent)
             latent = x_start * alpha_next.sqrt() + c * pred_noise + sigma * noise
 
+        latent = self.denormalize_latent(latent)
         return latent, mask
 
     @torch.no_grad()
@@ -237,7 +240,7 @@ class GaussianDiffusion(pl.LightningModule):
                 x_self_cond = pred_x_start.detatch()
 
         # predict and take gradient step
-        pred_noise, pred_x_start = self.diffusion_model_predictions(x_noisy, mask, t, condition, condition_mask, x_self_cond)
+        pred_noise, pred_x_start = self.diffusion_model_predictions(x_noisy, mask, t, condition, condition_mask)
 
         # 计算最终的 loss，只考虑非mask的部分
         # loss: bsz x max_seqlen x hidden

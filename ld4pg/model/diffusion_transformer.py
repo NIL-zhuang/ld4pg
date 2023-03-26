@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from ld4pg.model.x_transformer import LDEncoder
+from ld4pg.models.x_transformers import Encoder
 from ld4pg.module.pos_emb import SinusoidalPositionalEmbedding, AbsolutePositionalEmbedding
 from ld4pg.utils import init_zero_
 
@@ -60,7 +60,7 @@ class DiffusionTransformer(nn.Module):
 
         self.cross = (self_condition or conditional)
 
-        self.ld_encoder = LDEncoder(
+        self.ld_encoder = Encoder(
             dim=tx_dim,
             depth=tx_depth,
             heads=heads,

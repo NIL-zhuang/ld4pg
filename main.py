@@ -11,11 +11,11 @@ from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, Device
 from pytorch_lightning.strategies import DDPStrategy
 from transformers import AutoConfig, AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.dataset.data_module import get_dataset, DataModule
+from ld4pg.data.data_module import get_dataset, DataModule
 from ld4pg.model.denoising_diffusion import GaussianDiffusion
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
 
-FAST_DEV_RUN = False
+FAST_DEV_RUN = True
 CPU_TEST = False
 
 
@@ -97,16 +97,7 @@ def load_model(cfg: DictConfig, ckpt: str):
     diffusion = GaussianDiffusion.load_from_checkpoint(
         ckpt,
         model=model,
-        encoder=encoder,
-        cfg=cfg.diffusion.params,
-        max_seq_len=cfg.params.max_seq_len,
-        timesteps=diffusion_cfg.timesteps,
-        sampling_timesteps=diffusion_cfg.sampling_timesteps,
-        loss_type=diffusion_cfg.loss_type,
-        beta_schedule=diffusion_cfg.beta_schedule,
-        p2_loss_weight_gamma=diffusion_cfg.p2_loss_weight_gamma,
-        objective=diffusion_cfg.objective,
-        ddim_sampling_eta=diffusion_cfg.ddim_sampling_eta,
+        encoder=encoder
     )
     return diffusion
 
@@ -128,7 +119,7 @@ def build_trainer(cfg, save_path="saved_models"):
     callbacks = [
         ModelCheckpoint(
             dirpath=save_path,
-            filename='{step}-val_loss_ema{val/loss_ema:.2f}',
+            filename='{step}-{val/loss_ema:.2f}',
             every_n_train_steps=5000,
         ),
         RichProgressBar(refresh_rate=1),

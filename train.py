@@ -10,7 +10,7 @@ from pytorch_lightning.strategies import DDPStrategy
 from transformers import AutoConfig, AutoTokenizer
 
 from ld4pg.config import *
-from ld4pg.dataset.data_module import get_dataset, DataModule
+from ld4pg.data.data_module import get_dataset, DataModule
 from ld4pg.model.denoising_diffusion import GaussianDiffusion
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
 from ld4pg.utils.arguments import get_parser
