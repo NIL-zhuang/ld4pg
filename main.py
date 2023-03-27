@@ -1,6 +1,6 @@
 import argparse
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytorch_lightning as pl
 import torch
@@ -97,16 +97,7 @@ def load_model(cfg: DictConfig, ckpt: str):
     diffusion = GaussianDiffusion.load_from_checkpoint(
         ckpt,
         model=model,
-        encoder=encoder,
-        cfg=cfg.diffusion.params,
-        max_seq_len=cfg.params.max_seq_len,
-        timesteps=diffusion_cfg.timesteps,
-        sampling_timesteps=diffusion_cfg.sampling_timesteps,
-        loss_type=diffusion_cfg.loss_type,
-        beta_schedule=diffusion_cfg.beta_schedule,
-        p2_loss_weight_gamma=diffusion_cfg.p2_loss_weight_gamma,
-        objective=diffusion_cfg.objective,
-        ddim_sampling_eta=diffusion_cfg.ddim_sampling_eta,
+        encoder=encoder
     )
     return diffusion
 
@@ -116,7 +107,7 @@ def get_save_path(output_dir: str, dataset_name: str, model_name: str):
     if local_rank == 0:
         output_dir = os.path.join(
             output_dir,
-            f"{dataset_name}_{model_name}_{datetime.now().strftime('%Y%m%d-%H%M')}"
+            f"{dataset_name}_{model_name}_{(datetime.now() + timedelta(hours=8)).strftime('%Y%m%d-%H%M')}"
         )
         os.environ['RUN_OUTPUT_DIR'] = output_dir
     else:

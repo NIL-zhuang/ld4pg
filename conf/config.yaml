@@ -8,7 +8,7 @@ model:
       timesteps: 1000
       sampling_timesteps: 250
       loss_type: "l2"
-      objective: "pred_noise"
+      objective: "pred_x0"
       beta_schedule: "cosine"
       dim_head: 64
       p2_loss_weight_k: 1

@@ -43,7 +43,7 @@ class GaussianDiffusion(pl.LightningModule):
             timesteps=1000,
             sampling_timesteps=None,
             loss_type='l2',
-            objective='pred_noise',
+            objective='pred_x0',
             beta_schedule='cosine',
             p2_loss_weight_gamma=0.,
             # p2 loss weight, from https://arxiv.org/abs/2204.00227
@@ -343,6 +343,7 @@ class GaussianDiffusion(pl.LightningModule):
         }
 
     def predict_start_from_noise(self, x_t, t, noise):
+        # 这里是预测 x0
         return (extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
                 extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise)
 
