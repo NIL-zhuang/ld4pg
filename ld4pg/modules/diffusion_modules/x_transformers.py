@@ -515,6 +515,34 @@ class Residual(nn.Module):
         return x + residual
 
 
+class ScaleShift(nn.Module):
+    def __init__(self, time_emb_dim, dim_out):
+        super().__init__()
+        self.time_mlp = nn.Sequential(
+            nn.GELU(),
+            nn.Linear(time_emb_dim, dim_out * 2)
+        )
+        init_zero_(self.time_mlp[-1])
+
+    def forward(self, x, time_emb):
+        scale, shift_bias = self.time_mlp(time_emb).chunk(2, dim=2)
+        x = x * (scale + 1) + shift_bias
+        return x
+
+
+class TimeConditionedResidual(nn.Module):
+    """
+    FFN Time conditional residual
+    """
+
+    def __init__(self, time_emb_dim, dim_out):
+        super().__init__()
+        self.scale_shift = ScaleShift(time_emb_dim, dim_out)
+
+    def forward(self, x, residual, time_emb):
+        return self.scale_shift(x, time_emb) + residual
+
+
 class GRUGating(nn.Module):
     def __init__(self, dim, scale_residual=False, **kwargs):
         super().__init__()
@@ -937,8 +965,12 @@ class AttentionLayers(nn.Module):
             zero_init_branch_output=False,
             layer_dropout=0.,
             cross_attn_tokens_dropout=0.,
+            time_emb_dim=None,
             **kwargs
     ):
+        # scale time embedding FFN
+        self.scale_shift = exists(time_emb_dim)
+
         super().__init__()
         rotary_pos_emb = rotary_pos_emb or rotary_xpos
 
@@ -1068,11 +1100,14 @@ class AttentionLayers(nn.Module):
                 shift_range_lower = -layer_shift_tokens if not causal else 0
                 layer = ShiftTokens(range(shift_range_lower, shift_range_upper), layer)
 
-            residual_fn = GRUGating if gate_residual else Residual
-            residual = residual_fn(dim, scale_residual=scale_residual, scale_residual_constant=scale_residual_constant)
+            if self.scale_shift and layer_type in ['f']:
+                residual = TimeConditionedResidual(time_emb_dim, dim)
+            else:
+                residual_fn = GRUGating if gate_residual else Residual
+                residual = residual_fn(dim, scale_residual=scale_residual, scale_residual_constant=scale_residual_constant)
 
             pre_branch_norm = norm_fn() if pre_norm else None
-            post_branch_norm = norm_fn() if sandwich_norm else None
+            post_branch_norm = norm_fn() if sandwich_norm or (self.scale_shift and layer_type in ['f']) else None
             post_main_norm = norm_fn() if not pre_norm and not is_last_layer else None
 
             norms = nn.ModuleList([
@@ -1100,6 +1135,7 @@ class AttentionLayers(nn.Module):
             attn_mask=None,
             self_attn_context_mask=None,
             mems=None,
+            time_emb=None,
             return_hiddens=False
     ):
         assert not (self.cross_attend ^ exists(context)), 'context must be passed in if cross_attend is set to True'
@@ -1149,7 +1185,11 @@ class AttentionLayers(nn.Module):
             if exists(post_branch_norm):
                 out = post_branch_norm(out)
 
-            x = residual_fn(out, residual)
+            # 在这里加了一个 scale shift，使用了 residual_fn(out, residual, time_emb)
+            if self.scale_shift and layer_type in ['f']:
+                x = residual_fn(out, residual, time_emb)
+            else:
+                x = residual_fn(out, residual)
 
             if layer_type in ('a', 'c') and return_hiddens:
                 intermediates.append(inter)
