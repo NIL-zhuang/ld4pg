@@ -15,7 +15,7 @@ from ld4pg.dataset.data_module import get_dataset, DataModule
 from ld4pg.model.denoising_diffusion import GaussianDiffusion
 from ld4pg.model.diffusion_transformer import DiffusionTransformer
 
-FAST_DEV_RUN = False
+FAST_DEV_RUN = True
 CPU_TEST = False
 
 
@@ -175,6 +175,9 @@ def main(opt: argparse.Namespace) -> None:
     pl.seed_everything(opt.seed)
     cfg: DictConfig = OmegaConf.load(f"{opt.config}")
 
+    if opt.mode == 'eval':
+        cfg.data.params.batch_size = 7
+
     save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
     trainer = build_trainer(cfg.train.params, save_path)
 
@@ -187,7 +190,7 @@ def main(opt: argparse.Namespace) -> None:
         model = load_model(cfg.model, opt.ckpt)
         model.eval()
         model.freeze()
-        result = sample(model, trainer, dataset.test_dataloader(), cfg)
+        result = sample(model, trainer, dataset.train_dataloader(), cfg)
         print('\n'.join(result))
     elif opt.mode == 'resume':
         model = load_model(cfg.model, opt.ckpt)

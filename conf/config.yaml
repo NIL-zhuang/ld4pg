@@ -28,7 +28,7 @@ model:
       num_train_steps: 60000
   transformer:
     params:
-      depth: 6
+      depth: 12
       latent_dim: 768
       attention_head_dim: 64
       dropout: 0.1

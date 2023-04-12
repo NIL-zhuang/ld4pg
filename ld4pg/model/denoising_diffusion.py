@@ -189,7 +189,8 @@ class GaussianDiffusion(pl.LightningModule):
     def sample(self, condition=None, condition_mask=None, latent_mask=None):
         # TODO Create mask that controls length
         # TODO Implement for p_sample_loop
-        pred_latent, mask = self.ddim_sample(condition, condition_mask, latent_mask)
+        with self.ema_scope():
+            pred_latent, mask = self.ddim_sample(condition, condition_mask, latent_mask)
 
         if self.normalize:
             pred_latent = self.denormalize_latent(pred_latent)
