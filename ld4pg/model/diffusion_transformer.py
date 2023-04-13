@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 
-from ld4pg.models.x_transformers import Encoder
+from ld4pg.modules.diffusion_modules.x_transformers import Encoder
 from ld4pg.module.pos_emb import SinusoidalPositionalEmbedding, AbsolutePositionalEmbedding
 from ld4pg.utils import init_zero_
 

@@ -1181,6 +1181,8 @@ class AttentionLayers(nn.Module):
                 out, inter = block(x, context=context, mask=mask, context_mask=context_mask, prev_attn=prev_cross_attn)
             elif layer_type == 'f':
                 out = block(x)
+            else:
+                out = None
 
             if exists(post_branch_norm):
                 out = post_branch_norm(out)

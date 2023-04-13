@@ -1,7 +1,24 @@
 from einops import rearrange
 from torch import nn
+import torch
+import math
 
-from ld4pg.modules.diffusion_modules.x_transformers import AbsolutePositionalEmbedding, Encoder, ScaledSinusoidalEmbedding, init_zero_
+from ld4pg.modules.diffusion_modules.x_transformers import AbsolutePositionalEmbedding, Encoder, init_zero_
+
+
+class SinusoidalPosEmb(nn.Module):
+    def __init__(self, dim):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        device = x.device
+        half_dim = self.dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
+        emb = x[:, None] * emb[None, :]
+        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
+        return emb
 
 
 class DenoisingTransformer(nn.Module):
@@ -24,7 +41,7 @@ class DenoisingTransformer(nn.Module):
 
         tx_emb_dim = tx_dim * 4
         self.time_mlp = nn.Sequential(
-            ScaledSinusoidalEmbedding(tx_dim),
+            SinusoidalPosEmb(tx_dim),
             nn.Linear(tx_dim, tx_emb_dim),
             nn.GELU(),
             nn.Linear(tx_emb_dim, tx_emb_dim)
@@ -50,8 +67,8 @@ class DenoisingTransformer(nn.Module):
     def timestep_embedding(self, timesteps):
         time_emb = self.time_mlp(timesteps)
         time_emb = rearrange(time_emb, 'b d -> b 1 d')
-        time_emb = self.time_pos_mlp(time_emb)
-        return time_emb
+        time_pos_emb = self.time_pos_mlp(time_emb)
+        return time_emb, time_pos_emb
 
     def position_embedding(self, x):
         pos_emb = self.pos_emb(x)
@@ -69,11 +86,13 @@ class DenoisingTransformer(nn.Module):
         Returns:
             a [bsz x seqlen x dim] Tensor of outputs
         """
-        time_emb = self.timestep_embedding(timesteps)
+        time_emb, time_pos_emb = self.timestep_embedding(timesteps)
         pos_emb = self.position_embedding(x)
         x = self.input_proj(x)
-        tx_input = x + time_emb + pos_emb
+        tx_input = x + time_pos_emb + pos_emb
 
+        mask = mask.bool()
+        context_mask = context_mask.bool()
         tx_output = self.encoder(
             tx_input,
             context=context,

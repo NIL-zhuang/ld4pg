@@ -43,8 +43,8 @@ class GaussianDiffusion(pl.LightningModule):
             timesteps=1000,
             sampling_timesteps=None,
             loss_type='l2',
-            objective='pred_noise',
-            beta_schedule='cosine',
+            objective='pred_x0',
+            beta_schedule='linear',
             p2_loss_weight_gamma=0.,
             # p2 loss weight, from https://arxiv.org/abs/2204.00227
             # 0 is equivalent to weight of 1 across time - 1. is recommended
@@ -62,10 +62,9 @@ class GaussianDiffusion(pl.LightningModule):
         assert self.sampling_timesteps <= timesteps
 
         # enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.enc_dec_model)
-        # build encoder & semantic encoder
-        self.encoder = encoder
-        self.semantic_encoder = self.encoder
-        for f_model in [self.encoder, self.semantic_encoder]:
+        self.first_stage_model = encoder
+        self.cond_stage_model = self.first_stage_model
+        for f_model in [self.first_stage_model, self.cond_stage_model]:
             for p in f_model.parameters():
                 p.requires_grad = False
 
@@ -133,6 +132,16 @@ class GaussianDiffusion(pl.LightningModule):
         # calculate p2 re-weighting
         register_buffer('p2_loss_weight', (p2_loss_weight_k + alphas_cumprod / (1 - alphas_cumprod)) ** -p2_loss_weight_gamma)
 
+        if self.parameterization == "pred_noise":
+            lvlb_weights = self.betas ** 2 / (2 * self.posterior_variance * alphas * (1 - self.alphas_cumprod))
+        elif self.parameterization == "pred_x0":
+            lvlb_weights = 0.5 * torch.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
+        else:
+            raise NotImplementedError("mu not supported")
+        lvlb_weights[0] = lvlb_weights[1]
+        register_buffer('lvlb_weights', lvlb_weights)
+        assert not torch.isnan(self.lvlb_weights).all()
+
     def diffusion_model_predictions(self, x, mask, t, condition, condition_mask, x_self_cond=None):
         model_output = self.diffusion_model(x, mask, t, condition, condition_mask, x_self_cond)
 
@@ -163,13 +172,13 @@ class GaussianDiffusion(pl.LightningModule):
         # mask = torch.tensor([[True] * self.max_seq_len for _ in range(batch_size)], dtype=torch.bool, device=self.device)
         mask = latent_mask
 
+        # TODO: perhaps wrong DDIM, refer stable diffusion DDIM_Sampler
         x_start = None
         for time, time_next in tqdm(time_pairs, desc="Sampling"):
             time_cond = torch.full((batch_size,), time, dtype=torch.long, device=self.device)
             # 通过 self-condition 实现从 T 到 T-1的采样过程
             self_cond = x_start if self.self_condition else None
             pred_noise, x_start = self.diffusion_model_predictions(latent, mask, time_cond, condition, condition_mask, self_cond)
-            # x_start = normalize_latent(x_start)
 
             if time_next < 0:
                 # sample 结束，将 latent 表示为对应的 x_start
@@ -187,6 +196,25 @@ class GaussianDiffusion(pl.LightningModule):
 
         latent = self.denormalize_latent(latent)
         return latent, mask
+
+    def p_sample(self, latent, latent_mask, condition, condition_mask, t, x_self_cond=None):
+        bsz, *_, device = *latent.shape, latent.device
+        self_cond = x_self_cond if self.self_condition else None
+        pred_noise, x_start = self.diffusion_model_predictions(latent, latent_mask, t, condition, condition_mask, self_cond)
+        return x_start, pred_noise
+
+    @torch.no_grad()
+    def sample(self, condition=None, condition_mask=None, latent_mask=None, x_T=None, verbose=True):
+        bsz, cond_max_seqlen, cond_dim = condition.shape
+        latent = x_T if x_T is not None else torch.randn(bsz, self.max_seq_len, self.latent_dim)
+        timesteps = self.num_timesteps
+        iterator = tqdm(reversed(range(0, timesteps)), desc='Sampling t', total=timesteps) if verbose else reversed(range(0, timesteps))
+
+        for i in iterator:
+            ts = torch.full((bsz,), i, dtype=torch.long, device=self.device)
+            latent = self.p_sample(latent, latent_mask, condition, condition_mask, ts)
+
+        return latent
 
     @torch.no_grad()
     def sample(self, condition=None, condition_mask=None, latent_mask=None):
@@ -264,8 +292,8 @@ class GaussianDiffusion(pl.LightningModule):
         label = batch['labels']
         label_mask = batch['labels_attention_mask']
         label[:, 0] = 0
-        latent = self.encoder(label, attention_mask=batch['labels_attention_mask']).last_hidden_state
-        condition = self.semantic_encoder(src, attention_mask=batch['source_text_attention_mask']).last_hidden_state
+        latent = self.first_stage_model(label, attention_mask=batch['labels_attention_mask']).last_hidden_state
+        condition = self.cond_stage_model(src, attention_mask=batch['source_text_attention_mask']).last_hidden_state
         return latent, label_mask, condition, src_mask
 
     @contextmanager
@@ -311,7 +339,7 @@ class GaussianDiffusion(pl.LightningModule):
     def predict_step(self, batch, batch_idx):
         src = batch['source_text_input_ids']
         mask = batch['source_text_attention_mask']
-        condition = self.semantic_encoder(src, attention_mask=mask).last_hidden_state
+        condition = self.cond_stage_model(src, attention_mask=mask).last_hidden_state
 
         latent, latent_mask = self.sample(
             condition=condition,
@@ -346,12 +374,17 @@ class GaussianDiffusion(pl.LightningModule):
         }
 
     def predict_start_from_noise(self, x_t, t, noise):
-        return (extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-                extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise)
+        # 这里是预测 x0
+        return (
+                extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
+                extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
+        )
 
     def predict_noise_from_start(self, x_t, t, x0):
-        return ((extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0) /
-                extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape))
+        return (
+                (extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0) /
+                extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
+        )
 
     def normalize_latent(self, x_start):
         return (x_start - self.scale_mean) / self.scale_factor
