@@ -71,6 +71,7 @@ class LatentDiffusion(pl.LightningModule):
         self.latent_dim = model_cfg.params.latent_dim
         self.parameterization = parameterization
         self.loss_type = loss_type
+        self.schedule = beta_schedule
 
         self.use_ema = use_ema
         if use_ema:
@@ -96,6 +97,7 @@ class LatentDiffusion(pl.LightningModule):
 
         self.sample_cfg = sample_strategy
         self.log_every_t = log_every_t
+        self.valid_print = True
 
     def register_schedule(
             self,
@@ -381,17 +383,23 @@ class LatentDiffusion(pl.LightningModule):
         if latent_mask is not None:
             latent_mask = latent_mask[:batch_size]
         if ddim:
-            # TODO: DDIM Sample
-            ddim_sampler = DDIMSampler(self)
-            sample, intermediates = ddim_sampler.sample()
+            ddim_sampler = DDIMSampler(self, schedule=self.schedule)
+            sample, intermediates = ddim_sampler.sample(
+                ddim_steps, batch_size, (self.max_seqlen, self.latent_dim),
+                condition=condition, condition_mask=condition_mask, latent_mask=latent_mask,
+                **kwargs
+            )
         else:
-            sample, intermediates = self.sample(condition, condition_mask, latent_mask, return_intermediates=True, **kwargs)
+            sample, intermediates = self.sample(
+                condition, condition_mask, latent_mask,
+                return_intermediates=True, **kwargs
+            )
         return sample, intermediates, latent_mask
 
-    def generate_text(self, condition, condition_mask, latent_mask=None, batch_size=16):
+    def generate_text(self, condition, condition_mask, latent_mask=None, batch_size=16, **kwargs):
         if latent_mask is None:
             return []
-        sample, intermediates, latent_mask = self.sample_log(condition, condition_mask, latent_mask, batch_size, ddim=False)
+        sample, intermediates, latent_mask = self.sample_log(condition, condition_mask, latent_mask, batch_size, **kwargs)
         return self.decode_first_stage(sample, latent_mask)
 
     def generate(self, batch, batch_size=16):
@@ -418,13 +426,19 @@ class LatentDiffusion(pl.LightningModule):
                 self.valid_print = False
                 texts = self.generate(batch, batch_size=4)
                 print('\n'.join(texts))
+                print("=" * 20)
         self.log_dict(loss_dict_no_ema, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         self.log_dict(loss_dict_ema, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
 
     @torch.no_grad()
     def predict_step(self, batch, batch_idx):
         latent, latent_mask, condition, condition_mask = self.get_input(batch)
-        return self.generate_text(condition, condition_mask, latent_mask, batch_size=condition.shape[0])
+        with self.ema_scope():
+            texts = self.generate_text(
+                condition, condition_mask, latent_mask, batch_size=condition.shape[0],
+                verbose=True, ddim=True, ddim_steps=100
+            )
+        return texts
 
     def on_train_batch_end(self, *args, **kwargs):
         if self.use_ema:

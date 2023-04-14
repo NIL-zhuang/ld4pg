@@ -49,7 +49,9 @@ class LitEma(nn.Module):
             if m_param[key].requires_grad:
                 m_param[key].data.copy_(shadow_params[self.m_name2s_name[key]].data)
             else:
-                assert key not in self.m_name2s_name
+                if key not in self.m_name2s_name:
+                    print(f"Can't load {key}")
+                # assert key not in self.m_name2s_name
 
     def store(self, parameters):
         """
