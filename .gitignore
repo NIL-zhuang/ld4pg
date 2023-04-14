@@ -1,6 +1,7 @@
 # Byte-compiled / optimized / DLL files
 datasets
 huggingface
+.idea
 
 __pycache__/
 *.py[cod]
