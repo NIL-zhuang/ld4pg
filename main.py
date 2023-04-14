@@ -4,18 +4,17 @@ from datetime import datetime
 
 import pytorch_lightning as pl
 import torch
-from torch.utils.data.dataloader import DataLoader
 from omegaconf import OmegaConf, DictConfig
 from pytorch_lightning import loggers as pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, DeviceStatsMonitor
 from pytorch_lightning.strategies import DDPStrategy
-from transformers import AutoConfig, AutoTokenizer, BartForConditionalGeneration, BartTokenizer
+from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.dataset.data_module import get_dataset, DataModule
-from ld4pg.model.denoising_diffusion import GaussianDiffusion
-from ld4pg.model.diffusion_transformer import DiffusionTransformer
+from ld4pg.data.data_module import get_dataset, DataModule
+from ld4pg.models.diffusion.ddpm import LatentDiffusion
+from ld4pg.callbacks import CUDACallback
 
-FAST_DEV_RUN = True
+FAST_DEV_RUN = False
 CPU_TEST = False
 
 
@@ -49,61 +48,43 @@ def build_dataset(cfg: DictConfig):
     return dataset_module
 
 
-def build_denoise_network(cfg: DictConfig):
-    config = AutoConfig.from_pretrained(cfg.diffusion.params.enc_dec_model)
-    transformer_cfg = cfg.transformer.params
-    assert transformer_cfg.latent_dim % transformer_cfg.attention_head_dim == 0, f'Transformer dimension must be divisible by ATTN_HEAD_DIM'
-    assert transformer_cfg.latent_dim == config.d_model, "Transformer latent should be same dimension as encoder latent space"
-    model = DiffusionTransformer(
-        tx_dim=transformer_cfg.latent_dim,
-        tx_depth=transformer_cfg.depth,
-        heads=transformer_cfg.latent_dim // transformer_cfg.attention_head_dim,
-        latent_dim=transformer_cfg.latent_dim,
-        max_seq_len=cfg.params.max_seq_len,
-        self_condition=cfg.params.self_condition,
-        scale_shift=cfg.scale_shift,
-        dropout=transformer_cfg.dropout,
-        conditional=cfg.params.self_condition,
-        unconditional_prob=cfg.params.unconditional_prob,
+def build_model(cfg: DictConfig):
+    diffusion_cfg = cfg.diffusion.params
+    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    model = LatentDiffusion(
+        model_cfg=cfg.transformer,
+        first_stage_model=first_stage_model,
+        cond_stage_model=first_stage_model,
+        first_stage_tokenizer=first_stage_tokenizer,
+        condition_key=diffusion_cfg.condition_key,
+        beta_schedule=diffusion_cfg.beta_schedule,
+        parameterization=diffusion_cfg.parameterization,
+        loss_type=diffusion_cfg.loss_type,
+        timesteps=diffusion_cfg.timesteps,
+        max_seqlen=cfg.params.max_seq_len,
+        use_ema=diffusion_cfg.use_ema,
+        scale_factor=diffusion_cfg.scale_factor,
+        scale_mean=diffusion_cfg.scale_mean,
+        learning_rate=diffusion_cfg.learning_rate,
+        normalize=diffusion_cfg.normalize,
+        learn_logvar=diffusion_cfg.learn_logvar,
+        sample_strategy=cfg.sample.beam
     )
     return model
 
 
-def build_model(cfg: DictConfig):
-    model = build_denoise_network(cfg)
-    diffusion_cfg = cfg.diffusion.params
-    diffusion = GaussianDiffusion(
-        model,
-        cfg=cfg.diffusion.params,
-        max_seq_len=cfg.params.max_seq_len,
-        timesteps=diffusion_cfg.timesteps,  # number of steps
-        sampling_timesteps=diffusion_cfg.sampling_timesteps,  # number of sampling timesteps (ddim for faster inference)
-        loss_type=diffusion_cfg.loss_type,  # L1 or L2
-        beta_schedule=diffusion_cfg.beta_schedule,
-        p2_loss_weight_gamma=diffusion_cfg.p2_loss_weight_gamma,
-        objective=diffusion_cfg.objective,
-        ddim_sampling_eta=diffusion_cfg.ddim_sampling_eta,
-    )
-    return diffusion
-
-
 def load_model(cfg: DictConfig, ckpt: str):
-    model = build_denoise_network(cfg)
     diffusion_cfg = cfg.diffusion.params
-    diffusion = GaussianDiffusion.load_from_checkpoint(
+    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    model = LatentDiffusion.load_from_checkpoint(
         ckpt,
-        model=model,
-        cfg=cfg.diffusion.params,
-        max_seq_len=cfg.params.max_seq_len,
-        timesteps=diffusion_cfg.timesteps,
-        sampling_timesteps=diffusion_cfg.sampling_timesteps,
-        loss_type=diffusion_cfg.loss_type,
-        beta_schedule=diffusion_cfg.beta_schedule,
-        p2_loss_weight_gamma=diffusion_cfg.p2_loss_weight_gamma,
-        objective=diffusion_cfg.objective,
-        ddim_sampling_eta=diffusion_cfg.ddim_sampling_eta,
+        first_stage_model=first_stage_model,
+        cond_stage_model=first_stage_model,
+        first_stage_tokenizer=first_stage_tokenizer,
     )
-    return diffusion
+    return model
 
 
 def get_save_path(output_dir: str, dataset_name: str, model_name: str):
@@ -123,11 +104,11 @@ def build_trainer(cfg, save_path="saved_models"):
     callbacks = [
         ModelCheckpoint(
             dirpath=save_path,
-            filename='{step}-val_loss_ema{val/loss_ema:.2f}',
+            filename='{step}-val_ema{val/loss_ema:.2f}',
             every_n_train_steps=5000,
         ),
         RichProgressBar(refresh_rate=1),
-        DeviceStatsMonitor(),
+        # CUDACallback(),
     ]
     logger = pl_logger.TensorBoardLogger(save_dir=save_path)
     trainer = pl.Trainer(
@@ -139,40 +120,11 @@ def build_trainer(cfg, save_path="saved_models"):
         precision=cfg.precision,
         auto_select_gpus=True,
         log_every_n_steps=20,
-        strategy=DDPStrategy(find_unused_parameters=True),
+        strategy=DDPStrategy(),
         accumulate_grad_batches=cfg.accumulate_grad_batches,
         fast_dev_run=FAST_DEV_RUN
     )
     return trainer
-
-
-def sample(
-        model: pl.LightningModule,
-        trainer: pl.Trainer,
-        dataset: DataLoader,
-        cfg: DictConfig
-):
-    enc_dec_model = BartForConditionalGeneration.from_pretrained(cfg.model.diffusion.params.enc_dec_model)
-    tokenizer = BartTokenizer.from_pretrained(cfg.data.params.tokenizer)
-
-    result = []
-    encoder_output_list = trainer.predict(model, dataset)
-    for encoder_output, mask in encoder_output_list:
-        samples = enc_dec_model.generate(
-            encoder_outputs=encoder_output,
-            attention_mask=mask.clone(),
-            **cfg.model.sample.beam
-        )
-        text_list = [
-            tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True)
-            for g in samples
-        ]
-        text_list = [
-            text.strip() for text in text_list
-            if len(text.strip()) > 0
-        ]
-        result += text_list
-    return result
 
 
 def main(opt: argparse.Namespace) -> None:
@@ -191,15 +143,13 @@ def main(opt: argparse.Namespace) -> None:
         model = load_model(cfg.model, opt.ckpt)
         model.eval()
         model.freeze()
-        result = sample(model, trainer, dataset.test_dataloader(), cfg)
+        result = trainer.predict(model, dataset.test_dataloader())
         print('\n'.join(result))
     elif opt.mode == 'resume':
         model = load_model(cfg.model, opt.ckpt)
         trainer.fit(model, dataset)
     elif opt.mode == 'interact':
-        model = load_model(cfg.model, opt.ckpt)
-        model.eval()
-        model.freeze()
+        raise NotImplementedError("Interact mode is not implemented yet")
 
 
 if __name__ == '__main__':

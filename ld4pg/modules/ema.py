@@ -3,7 +3,7 @@ from torch import nn
 
 
 class LitEma(nn.Module):
-    def __init__(self, model, decay=0.995, use_num_updates=True):
+    def __init__(self, model, decay=0.9999, use_num_updates=True):
         super().__init__()
         if decay < 0.0 or decay > 1.0:
             raise ValueError('Decay must be between 0 and 1')
@@ -18,6 +18,7 @@ class LitEma(nn.Module):
                 s_name = name.replace('.', '')
                 self.m_name2s_name.update({name: s_name})
                 self.register_buffer(s_name, p.clone().detach().data)
+
         self.collected_params = []
 
     def forward(self, model):
@@ -35,9 +36,9 @@ class LitEma(nn.Module):
 
             for key in m_param:
                 if m_param[key].requires_grad:
-                    sname = self.m_name2s_name[key]
-                    shadow_params[sname] = shadow_params[sname].type_as(m_param[key])
-                    shadow_params[sname].sub_(one_minus_decay * (shadow_params[sname] - m_param[key]))
+                    s_name = self.m_name2s_name[key]
+                    shadow_params[s_name] = shadow_params[s_name].type_as(m_param[key])
+                    shadow_params[s_name].sub_(one_minus_decay * (shadow_params[s_name] - m_param[key]))
                 else:
                     assert key not in self.m_name2s_name
 
@@ -48,7 +49,9 @@ class LitEma(nn.Module):
             if m_param[key].requires_grad:
                 m_param[key].data.copy_(shadow_params[self.m_name2s_name[key]].data)
             else:
-                assert key not in self.m_name2s_name
+                if key not in self.m_name2s_name:
+                    print(f"Can't load {key}")
+                # assert key not in self.m_name2s_name
 
     def store(self, parameters):
         """

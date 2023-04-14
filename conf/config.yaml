@@ -1,38 +1,37 @@
 model:
   params:
     max_seq_len: 64
-    self_condition: True
+    self_condition: False
     unconditional_prob: 0.1
   diffusion:
     params:
       timesteps: 1000
       sampling_timesteps: 250
-      loss_type: "l2"
-      objective: "pred_noise"
-      beta_schedule: "cosine"
-      dim_head: 64
-      p2_loss_weight_k: 1
-      p2_loss_weight_gamma: 0.0
+      loss_type: "l1"
+      parameterization: "x0"
+      beta_schedule: "linear"
+      condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
-      normalize_latent: True
+      normalize: True
       scale_factor: 0.121005
       scale_mean: 0.002565
       use_ema: True
+      learn_logvar: False
       ema_decay: 0.9999
       self_condition: True
       enc_dec_model: "huggingface/bart-base"
       unconditional_prob: 0.1
       learning_rate: 1.0e-4
-      scheduler: "cosine"
       lr_warmup_steps: 0
-      num_train_steps: 60000
+      num_train_steps: 200000
   transformer:
     params:
-      depth: 6
+      tx_depth: 12
+      tx_dim: 768
       latent_dim: 768
       attention_head_dim: 64
       dropout: 0.1
-      scale_shift: False
+      scale_shift: True
   sample:
     beam:
       max_length: 64
@@ -54,7 +53,7 @@ data:
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 256
+    batch_size: 196
     num_workers: 4
 train:
   name: ""
