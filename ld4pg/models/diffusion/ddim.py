@@ -97,7 +97,8 @@ class DDIMSampler(object):
         # sampling
         max_seqlen, latent_dim = shape
         size = (batch_size, max_seqlen, latent_dim)
-        print(f'Data shape for DDIM sampling is {size}, eta {eta}')
+        if verbose:
+            print(f'Data shape for DDIM sampling is {size}, eta {eta}')
 
         samples, intermediates = self.ddim_sampling(
             condition, condition_mask,
@@ -115,6 +116,7 @@ class DDIMSampler(object):
             log_every_t=log_every_t,
             unconditional_guidance_scale=unconditional_guidance_scale,
             unconditional_conditioning=unconditional_conditioning,
+            verbose=verbose
         )
         return samples, intermediates
 
@@ -125,7 +127,7 @@ class DDIMSampler(object):
             callback=None, timesteps=None, quantize_denoised=False,
             mask=None, x0=None, img_callback=None, log_every_t=100,
             temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-            unconditional_guidance_scale=1., unconditional_conditioning=None,
+            unconditional_guidance_scale=1., unconditional_conditioning=None, verbose=False,
     ):
         device = self.model.betas.device
         b = shape[0]
@@ -143,9 +145,10 @@ class DDIMSampler(object):
         intermediates = {'x_inter': [latent], 'pred_x0': [latent]}
         time_range = reversed(range(0, timesteps)) if ddim_use_original_steps else np.flip(timesteps)
         total_steps = timesteps if ddim_use_original_steps else timesteps.shape[0]
-        print(f"Running DDIM Sampling with {total_steps} timesteps")
+        if verbose:
+            print(f"Running DDIM Sampling with {total_steps} timesteps")
 
-        iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps)
+        iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps) if verbose else iter(time_range)
 
         for i, step in enumerate(iterator):
             index = total_steps - i - 1
