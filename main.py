@@ -6,13 +6,12 @@ import pytorch_lightning as pl
 import torch
 from omegaconf import OmegaConf, DictConfig
 from pytorch_lightning import loggers as pl_logger
-from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, DeviceStatsMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
 from ld4pg.data.data_module import get_dataset, DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
-from ld4pg.callbacks import CUDACallback
 
 FAST_DEV_RUN = False
 CPU_TEST = False
@@ -24,6 +23,7 @@ def parse_args():
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
+    parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
@@ -104,11 +104,14 @@ def build_trainer(cfg, save_path="saved_models"):
     callbacks = [
         ModelCheckpoint(
             dirpath=save_path,
-            filename='{step}-val_ema{val/loss_ema:.2f}',
-            every_n_train_steps=5000,
+            monitor='val/loss_ema',
+            filename='step{step}-valema{val/loss_ema:.2f}',
+            every_n_train_steps=10000,
+            auto_insert_metric_name=False,
+            save_top_k=-1,
+            save_on_train_epoch_end=True,
         ),
         RichProgressBar(refresh_rate=1),
-        # CUDACallback(),
     ]
     logger = pl_logger.TensorBoardLogger(save_dir=save_path)
     trainer = pl.Trainer(
@@ -127,27 +130,49 @@ def build_trainer(cfg, save_path="saved_models"):
     return trainer
 
 
+def build_eval_trainer():
+    callbacks = [RichProgressBar(refresh_rate=1)]
+    trainer = pl.Trainer(
+        accelerator='gpu' if torch.cuda.is_available() and not CPU_TEST else 'cpu',
+        callbacks=callbacks,
+        logger=False,
+        fast_dev_run=FAST_DEV_RUN
+    )
+    return trainer
+
+
 def main(opt: argparse.Namespace) -> None:
     pl.seed_everything(opt.seed)
     cfg: DictConfig = OmegaConf.load(f"{opt.config}")
 
-    save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
-    trainer = build_trainer(cfg.train.params, save_path)
+    if opt.mode == 'train':
+        save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
+    else:
+        save_path = os.sep.join(opt.ckpt.split('/')[:2])
+    print(f"Model save path: {save_path}")
+
+    if opt.mode in ('train', 'resume'):
+        trainer = build_trainer(cfg.train.params, save_path)
+    else:
+        trainer = build_eval_trainer()
 
     dataset = build_dataset(cfg.data)
 
     if opt.mode == 'train':
         model = build_model(cfg.model)
         trainer.fit(model, dataset)
+    elif opt.mode == 'resume':
+        model = load_model(cfg.model, opt.ckpt)
+        trainer.fit(model, dataset)
     elif opt.mode == 'eval':
         model = load_model(cfg.model, opt.ckpt)
         model.eval()
         model.freeze()
-        result = trainer.predict(model, dataset.test_dataloader())
-        print('\n'.join(result))
-    elif opt.mode == 'resume':
-        model = load_model(cfg.model, opt.ckpt)
-        trainer.fit(model, dataset)
+        results = trainer.predict(model, dataset.test_dataloader())
+        texts = [text for result in results for text in result]
+        # print('\n'.join(texts))
+        with open(opt.tgt, 'w+', encoding='utf-8') as f:
+            f.write('\n'.join(texts))
     elif opt.mode == 'interact':
         raise NotImplementedError("Interact mode is not implemented yet")
 
