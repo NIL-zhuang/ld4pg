@@ -59,6 +59,7 @@ class DenoisingTransformer(nn.Module):
             heads=heads,
             attn_dropout=dropout,
             ff_dropout=dropout,
+            ff_glu=True,
             rel_pos_bias=True,
             cross_attend=True,
             time_emb_dim=tx_dim * 4 if scale_shift else None,

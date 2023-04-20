@@ -9,7 +9,7 @@ model:
       sampling_timesteps: 250
       loss_type: "l1"
       parameterization: "x0"
-      beta_schedule: "linear"
+      beta_schedule: "cosine"
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
@@ -22,8 +22,6 @@ model:
       enc_dec_model: "huggingface/bart-base"
       unconditional_prob: 0.1
       learning_rate: 1.0e-4
-      lr_warmup_steps: 0
-      num_train_steps: 200000
   transformer:
     params:
       tx_depth: 12
@@ -62,5 +60,5 @@ train:
     precision: 32
     learning_rate: 1.0e-4
     lr_warmup_steps: 0
-    num_train_steps: 60000
+    num_train_steps: 250000
     accumulate_grad_batches: 1
