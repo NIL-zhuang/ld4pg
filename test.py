@@ -1,4 +1,4 @@
-from transformers import BartTokenizer, BartForConditionalGeneration
+from transformers import BartTokenizer, BartForConditionalGeneration, BartPretrainedModel
 import torch
 from transformers.modeling_outputs import BaseModelOutput
 
@@ -39,12 +39,22 @@ def interpolation(s1: str, s2: str, model, tokenizer, steps: int = 20):
         print(idx, res)
 
 
+def emb_init(model: BartPretrainedModel):
+    encoder = model.get_encoder()
+    print(encoder.embed_tokens)
+    print(encoder.embed_tokens.weight.shape)
+    init_val = torch.mean(encoder.embed_tokens.weight, dim=0)
+    print(init_val.shape)
+    print(init_val)
+
+
 def main():
     tokenizer = BartTokenizer.from_pretrained(MODEL_PATH)
     model = BartForConditionalGeneration.from_pretrained(MODEL_PATH)
-    s1 = "My name is Huang, I love NJU."
-    s2 = "I love NJU, Huang is my name."
-    interpolation(s1, s2, model, tokenizer)
+    emb_init(model)
+    # s1 = "My name is Huang, and I love NJU."
+    # s2 = "I love NJU, Huang is my name."
+    # interpolation(s1, s2, model, tokenizer)
 
 
 if __name__ == '__main__':
