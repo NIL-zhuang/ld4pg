@@ -436,7 +436,7 @@ class LatentDiffusion(pl.LightningModule):
         with self.ema_scope():
             texts = self.generate_text(
                 condition, condition_mask, latent_mask, batch_size=condition.shape[0],
-                verbose=True, ddim=True, ddim_steps=100
+                verbose=False, ddim=True, ddim_steps=250
             )
         return texts
 

@@ -165,6 +165,8 @@ def main(opt: argparse.Namespace) -> None:
         model = load_model(cfg.model, opt.ckpt)
         trainer.fit(model, dataset)
     elif opt.mode == 'eval':
+        fdir, file_name = os.path.split(opt.tgt)
+        os.makedirs(fdir, exist_ok=True)
         model = load_model(cfg.model, opt.ckpt)
         model.eval()
         model.freeze()
