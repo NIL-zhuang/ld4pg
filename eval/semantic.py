@@ -1,5 +1,6 @@
 from typing import List
 
+import numpy as np
 import torch
 
 from eval.modules.bart_score import BARTScorer
@@ -13,10 +14,10 @@ def compute_bart_score(cands: List[str], refs: List[str]):
     )
     bart_scorer.load(path='huggingface/bart-score/bart_score.pth')
     scores = bart_scorer.score(cands, refs, batch_size=128)
-    return scores
+    return np.mean(scores)
 
 
 def compute_mis_score(cand: List[str], refs: List[str]):
     mis = MIS(model_name="huggingface/mis", device='cuda' if torch.cuda.is_available() else 'cpu')
     scores = mis.compute(cand, refs, verbose=True, batch_size=128)
-    return scores
+    return np.mean(scores)
