@@ -43,15 +43,16 @@ def do_evaluate(cands: List[List[str]], src: List[str], ref: List[str]):
     for idx, cand in enumerate(cands):
         print(f"\n{'=' * 10} Example {idx} {'=' * 10}\n")
         evaluate(cand, src, ref)
-    evaluate_selfBLEU(cands)
+    if len(cands) > 1:
+        evaluate_selfBLEU(cands)
 
 
 def main():
     args = parse_args()
     cands = []
-    for filename in glob(f"{args.cand_dir}{os.sep}*.txt"):
-        fpath = os.path.join(args.cand_dir, filename)
-        with open(fpath, 'r', encoding='utf-8') as f:
+    for filename in glob(f"{args.cand_dir}/*.txt"):
+        print(f"evaluating {filename}...")
+        with open(filename, 'r', encoding='utf-8') as f:
             cand = [line.strip() for line in f.readlines()]
             cands.append(cand)
     ref_file = pd.read_csv(args.src)
