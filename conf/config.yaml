@@ -51,7 +51,7 @@ data:
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 256
+    batch_size: 196
     num_workers: 4
 train:
   name: ""
