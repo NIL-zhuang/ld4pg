@@ -6,7 +6,7 @@ from typing import List
 import pandas as pd
 
 from eval import compute_bart_score, compute_mis_score
-from eval import compute_bleu, compute_meteor, compute_ppl, compute_ibleu
+from eval import compute_bleu, compute_sentence_bleu, compute_meteor, compute_ppl, compute_ibleu
 from eval import compute_div_n, compute_self_bleu
 
 
@@ -22,6 +22,7 @@ def evaluate(cand: List[str], src: List[str], ref: List[str]):
     print("Evaluating...")
     # evaluate quality
     print(f"BLEU: {compute_bleu(ref, cand)}")
+    print(f"sentenceBLEU: {compute_sentence_bleu(ref, cand)}")
     print(f"Meteor: {compute_meteor(ref, cand)}")
     print(f"PPL: {compute_ppl(cand)}")
     print(f"iBLEU: {compute_ibleu(src, ref, cand, alpha=0.8)}")

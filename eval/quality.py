@@ -1,13 +1,22 @@
 from typing import List
 
+import numpy as np
 import torch
 from evaluate import load
+from sacrebleu import sentence_bleu
 
 
 def compute_bleu(refs: List[str], cands: List[str]):
     bleu = load("bleu")
     results = bleu.compute(predictions=cands, references=refs)
     return results['bleu']
+
+
+def compute_sentence_bleu(refs: List[str], cands: List[str]):
+    score = []
+    for ref, cand in zip(refs, cands):
+        score.append(sentence_bleu(cand, [ref]).score)
+    return np.mean(score)
 
 
 def compute_meteor(refs: List[str], cands: List[str]):

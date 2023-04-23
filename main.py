@@ -175,8 +175,8 @@ def main(opt: argparse.Namespace) -> None:
         # print('\n'.join(texts))
         with open(opt.tgt, 'w+', encoding='utf-8') as f:
             f.write('\n'.join(texts))
-    elif opt.mode == 'interact':
-        raise NotImplementedError("Interact mode is not implemented yet")
+    else:
+        raise NotImplementedError(f"{opt.mode} is not implemented.")
 
 
 if __name__ == '__main__':

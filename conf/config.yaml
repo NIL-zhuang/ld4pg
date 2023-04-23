@@ -9,7 +9,7 @@ model:
       sampling_timesteps: 250
       loss_type: "l1"
       parameterization: "x0"
-      beta_schedule: "cosine"
+      beta_schedule: "linear"
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
