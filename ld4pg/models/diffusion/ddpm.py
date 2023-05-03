@@ -388,11 +388,12 @@ class LatentDiffusion(pl.LightningModule):
         return latent
 
     @torch.no_grad()
-    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False, timesteps=None):
+    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False, timesteps=None, **kwargs):
         return self.p_sample_loop(
             condition, condition_mask, latent_mask,
             timesteps=timesteps, x_T=x_T,
-            return_intermediates=return_intermediates, verbose=verbose
+            return_intermediates=return_intermediates, verbose=verbose,
+            **kwargs
         )
 
     @torch.no_grad()
