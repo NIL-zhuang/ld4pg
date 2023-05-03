@@ -66,6 +66,7 @@ def build_model(cfg: DictConfig):
         use_ema=diffusion_cfg.use_ema,
         scale_factor=diffusion_cfg.scale_factor,
         scale_mean=diffusion_cfg.scale_mean,
+        unconditional_prob=diffusion_cfg.unconditional_prob,
         learning_rate=diffusion_cfg.learning_rate,
         normalize=diffusion_cfg.normalize,
         learn_logvar=diffusion_cfg.learn_logvar,

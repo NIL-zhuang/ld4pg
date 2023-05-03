@@ -4,11 +4,12 @@ from functools import partial
 import numpy as np
 import pytorch_lightning as pl
 import torch
+from einops import repeat
 from omegaconf import DictConfig
 from torch import nn
+from tqdm import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.modeling_outputs import BaseModelOutput
-from tqdm import tqdm
 
 from ld4pg.models.diffusion.ddim import DDIMSampler
 from ld4pg.modules.diffusion_modules.diffusion_model import DenoisingTransformer
@@ -44,6 +45,7 @@ class LatentDiffusion(pl.LightningModule):
             scale_factor=1.0,
             scale_mean=0.0,
             learning_rate=1.0e-4,
+            unconditional_prob=0.1,
             normalize=True,
             learn_logvar: bool = False,
             l_simple_weight: float = 1.,
@@ -65,6 +67,7 @@ class LatentDiffusion(pl.LightningModule):
             f_model.train = disabled_train
             for param in f_model.parameters():
                 param.requires_grad = False
+
         self.model = DiffusionWrapper(model_cfg, condition_key=condition_key)
         self.num_timesteps = timesteps
         self.max_seqlen = max_seqlen
@@ -82,6 +85,11 @@ class LatentDiffusion(pl.LightningModule):
         self.normalize = normalize
         self.scale_factor = scale_factor
         self.scale_mean = scale_mean
+
+        self.unconditional_prob = unconditional_prob
+        if self.unconditional_prob > 0.:
+            self.unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.unconditional_prob)
+            self.unconditional_token_emb = nn.Parameter(torch.mean(self.first_stage_model.get_encoder().get_input_embeddings().weight, dim=0))
 
         self.learning_rate = learning_rate
 
@@ -267,14 +275,14 @@ class LatentDiffusion(pl.LightningModule):
 
     def get_input(self, batch):
         # 将源端句 latent 作为 condition，目标端句作为 paraphrase
-        src = batch['source_text_input_ids']
-        src_mask = batch['source_text_attention_mask']
-        label = batch['labels']
+        src = batch['source_text_input_ids'].clone()
+        src_mask = batch['source_text_attention_mask'].clone()
+        label = batch['labels'].clone()
         label[:, 0] = 0
-        label_mask = batch['labels_attention_mask']
+        label_mask = batch['labels_attention_mask'].clone()
 
-        latent, mask = self.get_first_stage_encoding(label.clone(), label_mask.clone())
-        cond, cond_mask = self.get_conditioning(src.clone(), src_mask.clone())
+        latent, mask = self.get_first_stage_encoding(label, label_mask)
+        cond, cond_mask = self.get_conditioning(src, src_mask)
         return latent, label_mask, cond, cond_mask
 
     def get_first_stage_encoding(self, encoder_posterior, mask):
@@ -286,7 +294,18 @@ class LatentDiffusion(pl.LightningModule):
 
     def get_conditioning(self, condition, mask):
         encoder = self.cond_stage_model
-        condition = encoder(condition, attention_mask=mask).last_hidden_state
+        if not self.training:
+            # In inference stage, never drop conditional guidance
+            condition = encoder(condition, attention_mask=mask).last_hidden_state
+            return condition, mask
+
+        # In training stage, drop conditional guidance with unconditional prob
+        # replace unconditional guidance with null token sequences
+        embeddings = encoder.embed_tokens(condition) * encoder.embed_scale
+        unconditional_embedding = repeat(self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0], s=condition.shape[1])
+        unconditional_mask = self.unconditional_bernoulli.sample([condition.shape[0]]).bool()
+        embeddings[unconditional_mask] = unconditional_embedding[unconditional_mask]
+        condition = encoder(inputs_embeds=embeddings, attention_mask=mask).last_hidden_state
         return condition, mask
 
     @torch.no_grad()
@@ -369,11 +388,12 @@ class LatentDiffusion(pl.LightningModule):
         return latent
 
     @torch.no_grad()
-    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False, timesteps=None):
+    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False, timesteps=None, **kwargs):
         return self.p_sample_loop(
             condition, condition_mask, latent_mask,
             timesteps=timesteps, x_T=x_T,
-            return_intermediates=return_intermediates, verbose=verbose
+            return_intermediates=return_intermediates, verbose=verbose,
+            **kwargs
         )
 
     @torch.no_grad()
@@ -382,6 +402,9 @@ class LatentDiffusion(pl.LightningModule):
         condition_mask = condition_mask[:batch_size]
         if latent_mask is not None:
             latent_mask = latent_mask[:batch_size]
+        else:
+            # todo Handle Latent Mask Sampling
+            latent_mask = None
         if ddim:
             ddim_sampler = DDIMSampler(self, schedule=self.schedule)
             sample, intermediates = ddim_sampler.sample(
@@ -424,7 +447,7 @@ class LatentDiffusion(pl.LightningModule):
             loss_dict_ema = {f"{key}_ema": value for key, value in loss_dict_ema.items()}
             if self.local_rank == 0 and self.valid_print:
                 self.valid_print = False
-                texts = self.generate(batch, batch_size=4)
+                texts = self.generate(batch, batch_size=8)
                 print('\n'.join(texts))
                 print("=" * 20)
         self.log_dict(loss_dict_no_ema, on_step=True, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
@@ -450,6 +473,9 @@ class LatentDiffusion(pl.LightningModule):
         if self.learn_logvar:
             print("Diffusion model optimizing logvar")
             params += [self.logvar]
+
+        if self.unconditional_prob > 0.:
+            params += [self.unconditional_token_emb]
 
         opt = torch.optim.AdamW(params, lr=lr, betas=(0.9, 0.999), weight_decay=1e-4)
         return opt
