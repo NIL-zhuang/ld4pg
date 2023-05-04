@@ -57,7 +57,7 @@ def eval_intermediate(model: LatentDiffusion):
     latent, latent_mask, cond, cond_mask = build_input(model, [sentences[0]], [sentences[1]])
     sample, intermediates, latent_mask = model.sample_log(
         cond, cond_mask, latent_mask, batch_size=1,
-        ddim=False, log_every_t=200, verbose=True
+        sampler="dpm", steps=50, log_every_t=200, verbose=True
     )
     texts = []
     for intermediate in intermediates:
@@ -88,7 +88,7 @@ def interpolation(model: LatentDiffusion):
         x_start = x_start.cuda()
 
     sample, intermediates, latent_mask = model.sample_log(
-        cond, cond_mask, cond_mask, batch_size=16, ddim=False,
+        cond, cond_mask, cond_mask, batch_size=16, sampler="dpm", steps=50,
         log_every_t=200, verbose=True, x_T=x_start
     )
     text = model.decode_first_stage(sample, latent_mask)
