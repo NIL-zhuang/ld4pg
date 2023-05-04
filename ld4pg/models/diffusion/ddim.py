@@ -199,7 +199,7 @@ class DDIMSampler(object):
         #     e_t_uncond, e_t = self.model.apply_model(x_in, x_mask_in, t_in, c_in, c_mask_in).chunk(2)
         #     e_t = e_t_uncond + unconditional_guidance_scale * (e_t - e_t_uncond)
 
-        pred_x0 = self.model.apply_model(x, x_mask, t, c, c_mask)
+        pred_x0 = self.model.apply_model(x, t, c, x_mask, c_mask)
         e_t = self.predict_eps_from_start(x, t, pred_x0)
 
         if score_corrector is not None:

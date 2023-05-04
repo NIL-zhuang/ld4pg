@@ -12,6 +12,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.modeling_outputs import BaseModelOutput
 
 from ld4pg.models.diffusion.ddim import DDIMSampler
+from ld4pg.models.diffusion.dpm_solver import DPMSolverSampler
 from ld4pg.modules.diffusion_modules.diffusion_model import DenoisingTransformer
 from ld4pg.modules.diffusion_modules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ld4pg.modules.ema import LitEma
@@ -196,7 +197,7 @@ class LatentDiffusion(pl.LightningModule):
             clip_denoised: bool = False, return_x0: bool = False,
     ):
         t_in = t
-        model_out = self.apply_model(latent, latent_mask, t_in, condition, condition_mask)
+        model_out = self.apply_model(latent, t_in, condition, latent_mask, condition_mask)
 
         if self.parameterization == "eps":
             x_recon = self.predict_start_from_noise(latent, t=t, noise=model_out)
@@ -214,7 +215,7 @@ class LatentDiffusion(pl.LightningModule):
         else:
             return model_mean, posterior_variance, posterior_log_variance
 
-    def apply_model(self, x_noisy, mask, t, cond, cond_mask, return_ids=False):
+    def apply_model(self, x_noisy, t, cond, mask, cond_mask, return_ids=False):
         if not isinstance(cond, list):
             cond = [cond]
             cond_mask = [cond_mask]
@@ -230,7 +231,7 @@ class LatentDiffusion(pl.LightningModule):
     def p_losses(self, x_start, mask, t, condition, condition_mask, noise=None):
         noise = default(noise, lambda: torch.randn_like(x_start))
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
-        model_output = self.apply_model(x_noisy, mask, t, condition, condition_mask)
+        model_output = self.apply_model(x_noisy, t, condition, mask, condition_mask)
 
         if self.parameterization == 'x0':
             target = x_start
@@ -397,7 +398,7 @@ class LatentDiffusion(pl.LightningModule):
         )
 
     @torch.no_grad()
-    def sample_log(self, condition, condition_mask, latent_mask=None, batch_size=16, ddim=False, ddim_steps=250, **kwargs):
+    def sample_log(self, condition, condition_mask, latent_mask=None, batch_size=16, sampler=None, steps=250, **kwargs):
         condition = condition[:batch_size]
         condition_mask = condition_mask[:batch_size]
         if latent_mask is not None:
@@ -405,17 +406,22 @@ class LatentDiffusion(pl.LightningModule):
         else:
             # todo Handle Latent Mask Sampling
             latent_mask = None
-        if ddim:
-            ddim_sampler = DDIMSampler(self, schedule=self.schedule)
-            sample, intermediates = ddim_sampler.sample(
-                ddim_steps, batch_size, (self.max_seqlen, self.latent_dim),
-                condition=condition, condition_mask=condition_mask, latent_mask=latent_mask,
-                **kwargs
-            )
-        else:
+
+        if not sampler:
             sample, intermediates = self.sample(
                 condition, condition_mask, latent_mask,
                 return_intermediates=True, **kwargs
+            )
+        else:
+            assert sampler in ['ddim', 'dpm'], f"{sampler} Sampler is not implemented yet."
+            if sampler == 'ddim':
+                sampler = DDIMSampler(self, schedule=self.schedule)
+            elif sampler == 'dpm':
+                sampler = DPMSolverSampler(self, schedule=self.schedule)
+            sample, intermediates = sampler.sample(
+                steps, batch_size, (self.max_seqlen, self.latent_dim),
+                condition=condition, condition_mask=condition_mask, latent_mask=latent_mask,
+                **kwargs
             )
         return sample, intermediates, latent_mask
 
@@ -459,7 +465,7 @@ class LatentDiffusion(pl.LightningModule):
         with self.ema_scope():
             texts = self.generate_text(
                 condition, condition_mask, latent_mask, batch_size=condition.shape[0],
-                verbose=False, ddim=True, ddim_steps=250
+                verbose=False, sampler='dpm', steps=50
             )
         return texts
 
