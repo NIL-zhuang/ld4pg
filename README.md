@@ -1,1 +1,1 @@
-# Latent Diffusion For Seq2Seq
+# Latent Diffusion For Paraphrase Generation

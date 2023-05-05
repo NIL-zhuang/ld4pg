@@ -12,6 +12,7 @@ from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokeni
 
 from ld4pg.data.data_module import get_dataset, DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
+from ld4pg.util import arg_transform
 
 FAST_DEV_RUN = False
 CPU_TEST = False
@@ -24,6 +25,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
     parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
+    parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
@@ -145,6 +147,9 @@ def build_eval_trainer():
 def main(opt: argparse.Namespace) -> None:
     pl.seed_everything(opt.seed)
     cfg: DictConfig = OmegaConf.load(f"{opt.config}")
+    for param in opt.update:
+        k, v = param.split("=")
+        OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
     if opt.mode == 'train':
         save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
@@ -154,6 +159,8 @@ def main(opt: argparse.Namespace) -> None:
 
     if opt.mode in ('train', 'resume'):
         trainer = build_trainer(cfg.train.params, save_path)
+        if os.environ.get('LOCAL_RANK', 0) == 0:
+            OmegaConf.save(config=cfg, f=os.path.join(save_path, 'conf.yaml'))
     else:
         trainer = build_eval_trainer()
 
