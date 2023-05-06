@@ -49,24 +49,29 @@ class DPMSolverSampler(object):
             unconditional_guidance_scale=1.,
             unconditional_conditioning=None,
             # this has to come in the same format as the conditioning, # e.g. as encoded tokens, ...
+            dpm_skip_type="time_uniform",
+            dpm_method="multistep",
+            dpm_order=2,
+            dpm_lower_order_final=True,
             **kwargs
     ):
         if condition is not None:
             if isinstance(condition, dict):
-                ctmp = condition[list(condition.keys())[0]]
-                while isinstance(ctmp, list): ctmp = ctmp[0]
-                if isinstance(ctmp, torch.Tensor):
-                    cbs = ctmp.shape[0]
+                c_tmp = condition[list(condition.keys())[0]]
+                while isinstance(c_tmp, list):
+                    c_tmp = c_tmp[0]
+                if isinstance(c_tmp, torch.Tensor):
+                    cbs = c_tmp.shape[0]
                     if cbs != batch_size:
-                        print(f"Warning: Got {cbs} conditionings but batch-size is {batch_size}")
+                        print(f"Warning: Got {cbs} conditioning but batch-size is {batch_size}")
             elif isinstance(condition, list):
-                for ctmp in condition:
-                    if ctmp.shape[0] != batch_size:
-                        print(f"Warning: Got {ctmp.shape[0]} conditionings but batch-size is {batch_size}")
+                for c_tmp in condition:
+                    if c_tmp.shape[0] != batch_size:
+                        print(f"Warning: Got {c_tmp.shape[0]} conditioning but batch-size is {batch_size}")
             else:
                 if isinstance(condition, torch.Tensor):
                     if condition.shape[0] != batch_size:
-                        print(f"Warning: Got {condition.shape[0]} conditionings but batch-size is {batch_size}")
+                        print(f"Warning: Got {condition.shape[0]} conditioning but batch-size is {batch_size}")
 
         max_seqlen, latent_dim = shape
         size = (batch_size, max_seqlen, latent_dim)
@@ -90,5 +95,9 @@ class DPMSolverSampler(object):
             guidance_scale=unconditional_guidance_scale,
         )
         dpm_solver = DPM_Solver(model_fn, ns)
-        x = dpm_solver.sample(latent, steps=dpm_steps, skip_type="time_uniform", method="multistep", order=2, lower_order_final=True)
+        x = dpm_solver.sample(
+            latent, steps=dpm_steps,
+            skip_type=dpm_skip_type, method=dpm_method, order=dpm_order,
+            lower_order_final=dpm_lower_order_final
+        )
         return x, []

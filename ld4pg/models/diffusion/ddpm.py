@@ -398,7 +398,7 @@ class LatentDiffusion(pl.LightningModule):
         )
 
     @torch.no_grad()
-    def sample_log(self, condition, condition_mask, latent_mask=None, batch_size=16, sampler=None, steps=250, **kwargs):
+    def sample_log(self, condition, condition_mask, latent_mask=None, batch_size=16, sampler="dpm", steps=20, **kwargs):
         condition = condition[:batch_size]
         condition_mask = condition_mask[:batch_size]
         if latent_mask is not None:
@@ -465,7 +465,7 @@ class LatentDiffusion(pl.LightningModule):
         with self.ema_scope():
             texts = self.generate_text(
                 condition, condition_mask, latent_mask, batch_size=condition.shape[0],
-                verbose=False, sampler='dpm', steps=50
+                verbose=False, sampler='dpm', steps=20
             )
         return texts
 
