@@ -9,7 +9,7 @@ model:
       sampling_timesteps: 250
       loss_type: "l1"
       parameterization: "x0"
-      beta_schedule: "linear"
+      beta_schedule: "cosine"
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
@@ -28,6 +28,7 @@ model:
       tx_dim: 768
       latent_dim: 768
       attention_head_dim: 64
+      max_seq_len: 64
       dropout: 0.1
       scale_shift: True
   sample:

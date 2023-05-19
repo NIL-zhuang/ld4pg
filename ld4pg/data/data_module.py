@@ -113,5 +113,5 @@ def get_dataset(dataset: str):
         os.path.join(DATASET_PATH, dataset, f"{split}.csv")
         for split in ['train', 'valid', 'test']
     ]
-    pd_datasets = [pd.read_csv(dataset) for dataset in datasets]
+    pd_datasets = [pd.read_csv(dataset).astype(str) for dataset in datasets]
     return pd_datasets

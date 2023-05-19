@@ -98,6 +98,6 @@ class DPMSolverSampler(object):
         x = dpm_solver.sample(
             latent, steps=dpm_steps,
             skip_type=dpm_skip_type, method=dpm_method, order=dpm_order,
-            lower_order_final=dpm_lower_order_final
+            lower_order_final=dpm_lower_order_final, **kwargs
         )
         return x, []
