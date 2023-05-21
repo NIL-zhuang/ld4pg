@@ -159,7 +159,7 @@ def main(opt: argparse.Namespace) -> None:
 
     if opt.mode in ('train', 'resume'):
         trainer = build_trainer(cfg.train.params, save_path)
-        if os.environ.get('LOCAL_RANK', 0) == 0:
+        if os.environ.get('LOCAL_RANK', 0) == 0 and FAST_DEV_RUN is False:
             OmegaConf.save(config=cfg, f=os.path.join(save_path, 'conf.yaml'))
     else:
         trainer = build_eval_trainer()
