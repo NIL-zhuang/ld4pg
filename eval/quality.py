@@ -25,9 +25,16 @@ def compute_meteor(refs: List[str], cands: List[str]):
     return results['meteor']
 
 
+def compute_rouge(refs: List[str], cands: List[str]):
+    rouge = load("rouge")
+    results = rouge.compute(predictions=cands, references=refs)
+    return results['rougeL']
+
+
 def compute_ppl(sentences: List[str], model_id="huggingface/gpt2"):
     perplexity = load("perplexity", module_type="metric")
-    results = perplexity.compute(predictions=sentences, model_id=model_id, device='cuda' if torch.cuda.is_available() else 'cpu')
+    results = perplexity.compute(predictions=sentences, model_id=model_id,
+                                 device='cuda' if torch.cuda.is_available() else 'cpu')
     return results['mean_perplexity']
 
 

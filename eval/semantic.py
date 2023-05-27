@@ -24,6 +24,9 @@ def compute_mis_score(cand: List[str], refs: List[str]):
 
 
 def compute_bert_score(sentences: List[str], srcs: List[str]):
-
-    bert_score = load("bert_score")
-    return bert_score.compute(cands=sentences, refs=srcs, lang="en", verbose=True, model_type="huggingface/deberta")
+    bert_score = load("bertscore")
+    scores = bert_score.compute(
+        predictions=sentences, references=srcs, model_type="huggingface/deberta",
+        num_layers=9, verbose=True
+    )
+    return np.mean(scores)
