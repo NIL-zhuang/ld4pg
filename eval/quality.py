@@ -12,6 +12,12 @@ def compute_bleu(refs: List[str], cands: List[str]):
     return results['bleu']
 
 
+def compute_sacrebleu(refs: List[str], cands: List[str]):
+    sacrebleu = load("sacrebleu")
+    results = sacrebleu.compute(predictions=cands, references=[[ref] for ref in refs])
+    return results["score"]
+
+
 def compute_sentence_bleu(refs: List[str], cands: List[str]):
     score = []
     for ref, cand in zip(refs, cands):

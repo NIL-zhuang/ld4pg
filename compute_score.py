@@ -4,7 +4,10 @@ from typing import List
 
 import pandas as pd
 
-from eval import compute_bleu, compute_sentence_bleu, compute_meteor, compute_ppl, compute_ibleu, compute_rouge
+from eval import (
+    compute_bleu, compute_sentence_bleu, compute_sacrebleu, compute_meteor, compute_ppl, compute_ibleu,
+    compute_rouge
+)
 from eval import compute_div_n, compute_self_bleu
 from eval import compute_mis_score, compute_bert_score
 
@@ -23,6 +26,7 @@ def evaluate(cand: List[str], src: List[str], ref: List[str]):
     results = {
         "BLEU": compute_bleu(ref, cand),
         "sentenceBLEU": compute_sentence_bleu(ref, cand),
+        "sacrebleu": compute_sacrebleu(ref, cand),
         "Meteor": compute_meteor(ref, cand),
         "PPL": compute_ppl(cand),
         "iBLEU": compute_ibleu(src, ref, cand, alpha=0.8),
@@ -63,5 +67,12 @@ def main():
     do_evaluate(cands, src, ref)
 
 
+def test():
+    predictions = ["hello there general kenobi", "on our way to ankh morpork"]
+    references = ["hello there general kenobi", "goodbye ankh morpork"]
+    print(compute_sacrebleu(references, predictions))
+
+
 if __name__ == "__main__":
+    # test()
     main()
