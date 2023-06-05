@@ -17,10 +17,13 @@ from ld4pg.util import arg_transform
 FAST_DEV_RUN = False
 CPU_TEST = False
 
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/config.yaml", help="path to config which construct model")
+    parser.add_argument("--config", type=str, default="conf/config_qqp.yaml", help="path to config which construct model")
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
@@ -98,6 +101,8 @@ def get_save_path(output_dir: str, dataset_name: str, model_name: str):
             f"{dataset_name}_{model_name}_{datetime.now().strftime('%Y%m%d-%H%M')}"
         )
         os.environ['RUN_OUTPUT_DIR'] = output_dir
+        if FAST_DEV_RUN is False:
+            os.makedirs(output_dir, exist_ok=True)
     else:
         output_dir = os.environ['RUN_OUTPUT_DIR']
     return output_dir
