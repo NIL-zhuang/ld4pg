@@ -29,4 +29,5 @@ def compute_bert_score(sentences: List[str], srcs: List[str]):
         predictions=sentences, references=srcs, model_type="huggingface/deberta",
         num_layers=9, verbose=True
     )
+    scores = scores['f1']
     return np.mean(scores)
