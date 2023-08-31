@@ -114,7 +114,7 @@ def build_trainer(cfg, save_path="saved_models"):
             dirpath=save_path,
             monitor='val/loss_ema',
             filename='step{step}-valema{val/loss_ema:.2f}',
-            every_n_train_steps=10000,
+            every_n_train_steps=20000,
             auto_insert_metric_name=False,
             save_top_k=-1,
             save_on_train_epoch_end=True,
@@ -176,7 +176,7 @@ def main(opt: argparse.Namespace) -> None:
         trainer.fit(model, dataset)
     elif opt.mode == 'resume':
         model = load_model(cfg.model, opt.ckpt)
-        trainer.fit(model, dataset)
+        trainer.fit(model, dataset, ckpt_path=opt.ckpt)
     elif opt.mode == 'eval':
         fdir, file_name = os.path.split(opt.tgt)
         os.makedirs(fdir, exist_ok=True)
