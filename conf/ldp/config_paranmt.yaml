@@ -1,6 +1,7 @@
 model:
   params:
-    max_seq_len: 96
+    max_seq_len: 64
+    self_condition: False
     unconditional_prob: 0.1
   diffusion:
     params:
@@ -12,8 +13,8 @@ model:
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
-      scale_factor: 0.123292
-      scale_mean: 0.002169
+      scale_factor: 0.1230393
+      scale_mean: 0.002427
       use_ema: True
       learn_logvar: False
       ema_decay: 0.9999
@@ -27,19 +28,19 @@ model:
       tx_dim: 768
       latent_dim: 768
       attention_head_dim: 64
-      max_seq_len: 128
+      max_seq_len: 64
       dropout: 0.1
       scale_shift: True
   sample:
     beam:
-      max_length: 96
+      max_length: 64
       min_length: 5
       do_sample: False
       num_beams: 4
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
     nucleus:
-      max_length: 96
+      max_length: 64
       min_length: 5
       do_sample: True
       top_p: 0.95
@@ -47,18 +48,18 @@ model:
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
 data:
-  name: "twitter"
+  name: "paranmt"
   params:
     tokenizer: "huggingface/bart-base"
-    max_token_len: 96
-    batch_size: 64
+    max_token_len: 64
+    batch_size: 192
     num_workers: 4
 train:
-  name: ""
+  name: "base"
   output_dir: "saved_models"
   params:
-    precision: 16
+    precision: 32
     learning_rate: 1.0e-4
     lr_warmup_steps: 0
-    num_train_steps: 400000
-    accumulate_grad_batches: 1
+    num_train_steps: 300000
+    accumulate_grad_batches: 4

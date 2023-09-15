@@ -19,7 +19,7 @@ model:
       learn_logvar: False
       ema_decay: 0.9999
       self_condition: True
-      enc_dec_model: "huggingface/finetune/qqp/bart-base"
+      enc_dec_model: "huggingface/bart-base"
       unconditional_prob: 0.1
       learning_rate: 1.0e-4
   transformer:
@@ -52,10 +52,10 @@ data:
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 196
+    batch_size: 192
     num_workers: 4
 train:
-  name: ""
+  name: "ldp"
   output_dir: "saved_models"
   params:
     precision: 32
