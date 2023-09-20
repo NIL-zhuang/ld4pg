@@ -10,7 +10,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.data.data_module import get_dataset, DataModule
+from ld4pg.data import get_dataset
+from ld4pg.data.data_module import DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
 from ld4pg.util import arg_transform
 
@@ -23,7 +24,8 @@ torch.backends.cudnn.allow_tf32 = True
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/config_qqp.yaml", help="path to config which construct model")
+    parser.add_argument("--config", type=str, default="conf/config_qqp.yaml",
+                        help="path to config which construct model")
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")

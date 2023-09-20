@@ -23,7 +23,8 @@ def parse_args():
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--ckpt_dir", type=str, default=None, help="path to model checkpoint save dir")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
-    parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result.txt", help="target file path")
+    parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result", help="target file dir")
+    parser.add_argument("--fname", type=str, default=None, help="target file name")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
     args = parser.parse_args()
     return args
@@ -92,7 +93,9 @@ def main(opt: argparse.Namespace):
     for m_path in tqdm(sorted(ckpt_list, reverse=True), desc="Evaluating models..."):
         # get model step, e.g. "step10000-val_ema123.45.ckpt" -> "step10000"
         m_name = os.path.splitext(os.path.split(m_path)[-1])[0].split('-')[0]
-        print(f"Evaluating {m_name}")
+        if opt.fname is not None:
+            m_name += f"-{opt.fname}"
+        print(f"generating {m_name}...")
 
         model: LatentDiffusion = load_model(cfg.model.diffusion.params.enc_dec_model, m_path).to(device)
 

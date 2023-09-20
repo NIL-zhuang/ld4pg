@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--ckpt_dir", type=str, default=None)
     parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result.txt", help="target file path")
+    parser.add_argument("--fname", type=str, default=None, help="target file name")
     args = parser.parse_args()
     return args
 
@@ -225,6 +226,8 @@ def predict(opt: argparse.Namespace):
     for m_path in tqdm(sorted(ckpt_list, reverse=True), desc="Evaluating models..."):
         # get model step, e.g. "step10000-val_ema123.45.ckpt" -> "step10000"
         m_name = os.path.splitext(os.path.split(m_path)[-1])[0].split('-')[0]
+        if opt.fname is not None:
+            m_name += f"-{opt.fname}"
         print(f"Evaluating {m_name}")
         model = load_model(cfg, m_path)
         results = generate_text(model, tokenizer, dataset.test_dataloader())

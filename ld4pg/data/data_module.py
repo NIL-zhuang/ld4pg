@@ -1,12 +1,10 @@
 import os
 
 import pandas as pd
-import pytorch_lightning as pl
-from pytorch_lightning.utilities.types import TRAIN_DATALOADERS, EVAL_DATALOADERS
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
 
-from ld4pg.config import *
+from ld4pg.data import AbstractDataModule
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -54,7 +52,7 @@ class DatasetModule(Dataset):
         )
 
 
-class DataModule(pl.LightningDataModule):
+class DataModule(AbstractDataModule):
     def __init__(
             self,
             cfg,
@@ -64,7 +62,7 @@ class DataModule(pl.LightningDataModule):
             test_dataset: pd.DataFrame,
             inf_train_dataloader: bool = False,
     ):
-        super().__init__()
+        super().__init__(cfg, tokenizer)
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
         self.num_workers = self.cfg.num_workers
@@ -72,46 +70,3 @@ class DataModule(pl.LightningDataModule):
         self.train_dataset = DatasetModule(train_dataset, tokenizer, cfg)
         self.valid_dataset = DatasetModule(valid_dataset, tokenizer, cfg)
         self.test_dataset = DatasetModule(test_dataset, tokenizer, cfg)
-
-    def train_dataloader(self) -> TRAIN_DATALOADERS:
-        dataloader = DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
-            pin_memory=True
-        )
-        return infinite_dataloader(dataloader) if self.infinite_dataloader else dataloader
-
-    def val_dataloader(self) -> EVAL_DATALOADERS:
-        return DataLoader(
-            self.valid_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False
-        )
-
-    def test_dataloader(self) -> EVAL_DATALOADERS:
-        return DataLoader(
-            self.test_dataset,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            pin_memory=False
-        )
-
-
-def infinite_dataloader(data_loader: DataLoader):
-    while True:
-        for data in data_loader:
-            yield data
-
-
-def get_dataset(dataset: str):
-    datasets = [
-        os.path.join(DATASET_PATH, dataset, f"{split}.csv")
-        for split in ['train', 'valid', 'test']
-    ]
-    pd_datasets = [pd.read_csv(dataset).astype(str) for dataset in datasets]
-    return pd_datasets
