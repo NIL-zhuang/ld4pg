@@ -16,17 +16,13 @@ from ld4pg.models.diffusion.dpm_solver import DPMSolverSampler
 from ld4pg.modules.diffusion_modules.diffusion_model import DenoisingTransformer
 from ld4pg.modules.diffusion_modules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ld4pg.modules.ema import LitEma
-from ld4pg.util import default
+from ld4pg.util import default, disabled_train
 
 __conditioning_keys__ = {
     'concat': 'c_concat',
     'crossattn': 'c_crossattn',
     'adm': 'y'
 }
-
-
-def disabled_train(self, mode=True):
-    return self
 
 
 class LatentDiffusion(pl.LightningModule):
@@ -59,8 +55,9 @@ class LatentDiffusion(pl.LightningModule):
     ):
         super().__init__()
         self.save_hyperparameters(ignore=['first_stage_model', 'cond_stage_model', 'first_stage_tokenizer'])
-        self.first_stage_model = first_stage_model.eval()
+        # self.first_stage_model = first_stage_model.eval()
         # note: this is a hack to get the encoder of the first stage model
+        self.first_stage_model = first_stage_model
         self.cond_stage_model = self.first_stage_model.get_encoder()
         # self.cond_stage_model = cond_stage_model.eval()
         self.first_stage_tokenizer = first_stage_tokenizer
@@ -90,7 +87,11 @@ class LatentDiffusion(pl.LightningModule):
         self.unconditional_prob = unconditional_prob
         if self.unconditional_prob > 0.:
             self.unconditional_bernoulli = torch.distributions.Bernoulli(probs=self.unconditional_prob)
-            self.unconditional_token_emb = nn.Parameter(torch.mean(self.first_stage_model.get_encoder().get_input_embeddings().weight, dim=0))
+            self.unconditional_token_emb = nn.Parameter(
+                torch.mean(
+                    self.first_stage_model.get_encoder().get_input_embeddings().weight,
+                    dim=0
+                ))
 
         self.learning_rate = learning_rate
 
@@ -116,7 +117,9 @@ class LatentDiffusion(pl.LightningModule):
             linear_end: float = 2e-2,
             cosine_s: float = 8e-3
     ):
-        betas = make_beta_schedule(beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s)
+        betas = make_beta_schedule(
+            beta_schedule, timesteps, linear_start=linear_start, linear_end=linear_end, cosine_s=cosine_s
+        )
         alphas = 1. - betas
         alphas_cumprod = np.cumprod(alphas, axis=0)
         alphas_cumprod_prev = np.append(1., alphas_cumprod[:-1])
@@ -137,15 +140,21 @@ class LatentDiffusion(pl.LightningModule):
         self.register_buffer('sqrt_recipm1_alphas_cumprod', to_torch(np.sqrt(1. / alphas_cumprod - 1)))
 
         # calculations for posterior q(x_{t-1} | x_t, x_0)
-        posterior_variance = (1 - self.v_posterior) * betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod) + self.v_posterior * betas
+        posterior_variance = (1 - self.v_posterior) * betas * (1. - alphas_cumprod_prev) / (
+                1. - alphas_cumprod) + self.v_posterior * betas
         # above: equal to 1. / (1. / (1. - alpha_cumprod_tm1) + alpha_t / beta_t)
         self.register_buffer('posterior_variance', to_torch(posterior_variance))
         # below: log calculation clipped because the posterior variance is 0 at the beginning of the diffusion chain
         self.register_buffer('posterior_log_variance_clipped', to_torch(np.log(np.maximum(posterior_variance, 1e-20))))
-        self.register_buffer('posterior_mean_coef1', to_torch(betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
-        self.register_buffer('posterior_mean_coef2', to_torch((1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
+        self.register_buffer(
+            'posterior_mean_coef1',
+            to_torch(betas * np.sqrt(alphas_cumprod_prev) / (1. - alphas_cumprod)))
+        self.register_buffer(
+            'posterior_mean_coef2',
+            to_torch((1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod)))
         if self.parameterization == "eps":
-            lvlb_weights = self.betas ** 2 / (2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
+            lvlb_weights = self.betas ** 2 / (
+                    2 * self.posterior_variance * to_torch(alphas) * (1 - self.alphas_cumprod))
         elif self.parameterization == "x0":
             lvlb_weights = 0.5 * np.sqrt(torch.Tensor(alphas_cumprod)) / (2. * 1 - torch.Tensor(alphas_cumprod))
         else:
@@ -215,7 +224,7 @@ class LatentDiffusion(pl.LightningModule):
         else:
             return model_mean, posterior_variance, posterior_log_variance
 
-    def apply_model(self, x_noisy, t, cond, mask, cond_mask, return_ids=False):
+    def apply_model(self, x_noisy, t, cond, mask, cond_mask, return_ids=False, *args, **kwargs):
         if not isinstance(cond, list):
             cond = [cond]
             cond_mask = [cond_mask]
@@ -284,7 +293,7 @@ class LatentDiffusion(pl.LightningModule):
 
         latent, mask = self.get_first_stage_encoding(label, label_mask)
         cond, cond_mask = self.get_conditioning(src, src_mask)
-        return latent, label_mask, cond, cond_mask
+        return latent, mask, cond, cond_mask
 
     def get_first_stage_encoding(self, encoder_posterior, mask):
         encoder = self.first_stage_model.get_encoder()
@@ -295,17 +304,16 @@ class LatentDiffusion(pl.LightningModule):
 
     def get_conditioning(self, condition, mask):
         encoder = self.cond_stage_model
-        if not self.training:
-            # In inference stage, never drop conditional guidance
-            condition = encoder(condition, attention_mask=mask).last_hidden_state
-            return condition, mask
-
         # In training stage, drop conditional guidance with unconditional prob
         # replace unconditional guidance with null token sequences
         embeddings = encoder.embed_tokens(condition) * encoder.embed_scale
-        unconditional_embedding = repeat(self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0], s=condition.shape[1])
-        unconditional_mask = self.unconditional_bernoulli.sample([condition.shape[0]]).bool()
-        embeddings[unconditional_mask] = unconditional_embedding[unconditional_mask]
+        if self.training and self.unconditional_prob == 0.:
+            unconditional_embedding = repeat(
+                self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0],
+                s=condition.shape[1]
+            )
+            unconditional_mask = self.unconditional_bernoulli.sample([condition.shape[0]]).bool()
+            embeddings[unconditional_mask] = unconditional_embedding[unconditional_mask]
         condition = encoder(inputs_embeds=embeddings, attention_mask=mask).last_hidden_state
         return condition, mask
 
@@ -375,7 +383,8 @@ class LatentDiffusion(pl.LightningModule):
             timesteps = self.num_timesteps
         if start_T is not None:
             timesteps = min(timesteps, start_T)
-        iterator = tqdm(reversed(range(0, timesteps)), desc='Sampling t', total=timesteps) if verbose else reversed(range(0, timesteps))
+        iterator = tqdm(reversed(range(0, timesteps)), desc='Sampling t', total=timesteps) if verbose else reversed(
+            range(0, timesteps))
 
         for t in iterator:
             ts = torch.full((bsz,), t, dtype=torch.long, device=self.device)
@@ -389,7 +398,8 @@ class LatentDiffusion(pl.LightningModule):
         return latent
 
     @torch.no_grad()
-    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False, timesteps=None, **kwargs):
+    def sample(self, condition, condition_mask, latent_mask, return_intermediates=False, x_T=None, verbose=False,
+               timesteps=None, **kwargs):
         return self.p_sample_loop(
             condition, condition_mask, latent_mask,
             timesteps=timesteps, x_T=x_T,
@@ -428,7 +438,8 @@ class LatentDiffusion(pl.LightningModule):
     def generate_text(self, condition, condition_mask, latent_mask=None, batch_size=16, **kwargs):
         if latent_mask is None:
             return []
-        sample, intermediates, latent_mask = self.sample_log(condition, condition_mask, latent_mask, batch_size, **kwargs)
+        sample, intermediates, latent_mask = self.sample_log(condition, condition_mask, latent_mask, batch_size,
+                                                             **kwargs)
         return self.decode_first_stage(sample, latent_mask)
 
     def generate(self, batch, batch_size=16):
@@ -504,6 +515,7 @@ class DiffusionWrapper(pl.LightningModule):
             latent_dim=dm_cfg.latent_dim,
             tx_depth=dm_cfg.tx_depth,
             heads=dm_cfg.latent_dim // dm_cfg.attention_head_dim,
+            # max_seq_len=dm_cfg.max_seq_len,  # 这一行注释比较奇怪，对qqp_base的模型要注释掉
             dropout=dm_cfg.dropout,
             scale_shift=dm_cfg.scale_shift
         )
