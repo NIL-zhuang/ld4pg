@@ -1,11 +1,12 @@
-import math
 import os
 
+import math
 import pandas as pd
 import torch
 from nltk import word_tokenize
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer
+from rich.progress import track
 
 from ld4pg.data.data_module import AbstractDataModule
 
@@ -18,6 +19,7 @@ class ControlNetKeywordDatasetModule(Dataset):
     ids:   <BOS> <PAD> <PAD> KEYWORD <PAD> <PAD> KEYWORD <PAD> <EOS> <PAD> ...
     masks:   1    0    0      1      0     0      1      0     1     0   ...
     """
+
     def __init__(
             self,
             data: pd.DataFrame,
@@ -58,7 +60,10 @@ class ControlNetKeywordDatasetModule(Dataset):
     def build_keyword_mask(self, target_sentence, target_kw, target_kw_mask, tokenizer):
         kw_token_ids_list = []
         kw_attention_mask_list = []
-        for sent, ids, mask in zip(target_sentence, target_kw, target_kw_mask):
+        for sent, ids, mask in track(
+                zip(target_sentence, target_kw, target_kw_mask),
+                total=len(target_sentence), description=f"building keyword dataset"
+        ):
             kw_token_ids, kw_attention_mask = self.build_kw_sentence(
                 sent, ids, mask, tokenizer, self.keyword_mask_ratio
             )
@@ -90,7 +95,7 @@ class ControlNetKeywordDatasetModule(Dataset):
 
         token_idx, word_idx = 0, 0
         kw_attention_mask = [0] * len(kw_tokens)
-        kw_attention_mask[0] = 1    # <BOS> token
+        kw_attention_mask[0] = 1  # <BOS> token
 
         while token_idx < len(kw_tokens) and word_idx < len(words):
             cur_token = kw_tokens[token_idx]
@@ -142,15 +147,18 @@ class ControlNetKeywordDataModule(AbstractDataModule):
             train_dataset: pd.DataFrame = None,
             valid_dataset: pd.DataFrame = None,
             test_dataset: pd.DataFrame = None,
-            inf_train_dataloader: bool = False
+            inf_train_dataloader: bool = False,
+            keyword_mask_ratio: float = 0.15,
     ):
         super().__init__(cfg, tokenizer, train_dataset, valid_dataset, test_dataset, inf_train_dataloader)
         self.cfg = cfg
         self.batch_size = self.cfg.batch_size
         self.num_workers = self.cfg.num_workers
+
+        kw_ratio = cfg.kw_ratio
         if train_dataset is not None:
-            self.train_dataset = ControlNetKeywordDatasetModule(train_dataset, tokenizer, cfg)
+            self.train_dataset = ControlNetKeywordDatasetModule(train_dataset, tokenizer, cfg, kw_ratio)
         if valid_dataset is not None:
-            self.valid_dataset = ControlNetKeywordDatasetModule(valid_dataset, tokenizer, cfg)
+            self.valid_dataset = ControlNetKeywordDatasetModule(valid_dataset, tokenizer, cfg, kw_ratio)
         if test_dataset is not None:
-            self.test_dataset = ControlNetKeywordDatasetModule(test_dataset, tokenizer, cfg)
+            self.test_dataset = ControlNetKeywordDatasetModule(test_dataset, tokenizer, cfg, kw_ratio)

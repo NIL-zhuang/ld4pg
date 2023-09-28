@@ -9,7 +9,8 @@ from rich.progress import track
 from tqdm import tqdm
 from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.data.data_module import get_dataset, DataModule
+from ld4pg.data import get_dataset
+from ld4pg.data.data_module import DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
 from ld4pg.util import arg_transform
 
