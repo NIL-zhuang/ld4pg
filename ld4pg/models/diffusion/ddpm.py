@@ -318,14 +318,14 @@ class LatentDiffusion(pl.LightningModule):
         return condition, mask
 
     @torch.no_grad()
-    def decode_first_stage(self, latent, latent_mask):
+    def decode_first_stage(self, latent, latent_mask, sample_strategy: dict):
         if self.normalize:
             latent = latent * self.scale_factor
         encoder_output = BaseModelOutput(last_hidden_state=latent.clone())
         samples = self.first_stage_model.generate(
             encoder_outputs=encoder_output,
             attention_mask=latent_mask.clone(),
-            **self.sample_cfg
+            **sample_strategy
         )
         texts = [
             self.first_stage_tokenizer.decode(sample, skip_special_tokens=True, clean_up_tokenization_spaces=True)
@@ -435,12 +435,15 @@ class LatentDiffusion(pl.LightningModule):
             )
         return sample, intermediates, latent_mask
 
-    def generate_text(self, condition, condition_mask, latent_mask=None, batch_size=16, **kwargs):
+    def generate_text(
+            self, condition, condition_mask, latent_mask=None, batch_size=16, sample_strategy: dict = None, **kwargs
+    ):
         if latent_mask is None:
             return []
-        sample, intermediates, latent_mask = self.sample_log(condition, condition_mask, latent_mask, batch_size,
-                                                             **kwargs)
-        return self.decode_first_stage(sample, latent_mask)
+        sample, intermediates, latent_mask = self.sample_log(
+            condition, condition_mask, latent_mask, batch_size, **kwargs
+        )
+        return self.decode_first_stage(sample, latent_mask, sample_strategy)
 
     def generate(self, batch, batch_size=16):
         latent, latent_mask, condition, condition_mask = self.get_input(batch)

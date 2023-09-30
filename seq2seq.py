@@ -13,6 +13,7 @@ from ld4pg.data import get_dataset
 from ld4pg.data.data_module import DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
 from ld4pg.util import arg_transform
+from ld4pg.config import SAMPLE_STRATEGY
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -67,7 +68,8 @@ def predict(model, data_loader, steps: int = 25):
             x, x_mask, c, c_mask = model.get_input(batch)
             texts = model.generate_text(
                 c, c_mask, x_mask, batch_size=c.shape[0],
-                verbose=False, sampler='dpm', steps=steps
+                sample_strategy=SAMPLE_STRATEGY['nucleus'],
+                verbose=False, sampler='dpm', steps=steps,
             )
             results += texts
     return results
