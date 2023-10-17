@@ -11,7 +11,7 @@ from eval import (
     compute_bleu, compute_sentence_bleu, compute_sacrebleu,
     compute_meteor, compute_ppl, compute_ibleu, compute_rouge
 )
-from eval import compute_div_n, compute_self_bleu
+from eval import compute_div_n
 
 
 def parse_args():
@@ -42,10 +42,6 @@ def evaluate(cand: List[str], src: List[str], ref: List[str]):
     for k, v in results.items():
         print(f"{k}: {v}")
     return results
-
-
-def evaluate_selfBLEU(cands: List[List[str]]):
-    print(f"selfBLEU: {compute_self_bleu(cands)}")
 
 
 def do_evaluate(cands: List[str], src: List[str], ref: List[str]):
