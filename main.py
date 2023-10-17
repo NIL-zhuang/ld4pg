@@ -116,7 +116,7 @@ def build_trainer(cfg, save_path="saved_models"):
             dirpath=save_path,
             monitor='val/loss_ema',
             filename='step{step}-valema{val/loss_ema:.2f}',
-            every_n_train_steps=20000,
+            every_n_train_steps=cfg.save_intervals if cfg.save_intervals is not None else 20000,
             auto_insert_metric_name=False,
             save_top_k=-1,
             save_on_train_epoch_end=True,
@@ -159,7 +159,7 @@ def main(opt: argparse.Namespace) -> None:
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
     if opt.mode == 'train':
-        save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
+        save_path = get_save_path(cfg.train.output_dir, cfg.data.name, cfg.train.name if opt.name == '' else opt.name)
     else:
         save_path = os.sep.join(opt.ckpt.split('/')[:2])
     print(f"Model save path: {save_path}")

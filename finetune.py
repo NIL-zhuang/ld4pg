@@ -14,10 +14,12 @@ from torch.optim import AdamW
 from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartTokenizerFast as BartTokenizer
 
+from ld4pg.config import SAMPLE_STRATEGY
 from ld4pg.data import get_dataset
 from ld4pg.data.data_module import DataModule
 from ld4pg.util import arg_transform
 
+STRATEGY = "nucleus"
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -131,12 +133,7 @@ class PLModel(pl.LightningModule):
         sentences = self.model.generate(
             inputs=input_ids,
             attention_mask=attention_mask,
-            max_length=64,
-            min_length=5,
-            do_sample=False,
-            num_beams=4,
-            no_repeat_ngram_size=3,
-            repetition_penalty=1.2
+
         )
         return sentences
 
@@ -195,12 +192,7 @@ def generate_text(model, tokenizer, dataloader):
             sentences = model.generate(
                 inputs=input_ids,
                 attention_mask=attention_mask,
-                max_length=64,
-                min_length=5,
-                do_sample=False,
-                num_beams=4,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.2
+                **SAMPLE_STRATEGY[STRATEGY],
             )
             sentences = tokenizer.batch_decode(sentences, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             results += sentences

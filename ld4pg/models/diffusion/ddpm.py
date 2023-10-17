@@ -11,12 +11,15 @@ from tqdm import tqdm
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from transformers.modeling_outputs import BaseModelOutput
 
+from ld4pg.config import SAMPLE_STRATEGY
 from ld4pg.models.diffusion.ddim import DDIMSampler
 from ld4pg.models.diffusion.dpm_solver import DPMSolverSampler
 from ld4pg.modules.diffusion_modules.diffusion_model import DenoisingTransformer
 from ld4pg.modules.diffusion_modules.util import make_beta_schedule, extract_into_tensor, noise_like
 from ld4pg.modules.ema import LitEma
 from ld4pg.util import default, disabled_train
+
+DDPM_SAMPLE_STRATEGY = SAMPLE_STRATEGY['beam1']
 
 __conditioning_keys__ = {
     'concat': 'c_concat',
@@ -49,7 +52,7 @@ class LatentDiffusion(pl.LightningModule):
             original_elbo_weight: float = 0.,
             v_posterior: float = 0.,
             log_every_t: int = 100,
-            sample_strategy=None,
+            sample_strategy=DDPM_SAMPLE_STRATEGY,
             *args,
             **kwargs,
     ):
@@ -447,7 +450,7 @@ class LatentDiffusion(pl.LightningModule):
 
     def generate(self, batch, batch_size=16):
         latent, latent_mask, condition, condition_mask = self.get_input(batch)
-        return self.generate_text(condition, condition_mask, latent_mask, batch_size)
+        return self.generate_text(condition, condition_mask, latent_mask, batch_size, sample_strategy=self.sample_cfg)
 
     def training_step(self, batch, batch_idx):
         loss, loss_dict = self.shared_step(batch, batch_idx)
@@ -479,7 +482,7 @@ class LatentDiffusion(pl.LightningModule):
         with self.ema_scope():
             texts = self.generate_text(
                 condition, condition_mask, latent_mask, batch_size=condition.shape[0],
-                verbose=False, sampler='dpm', steps=20
+                verbose=False, sampler='dpm', steps=20, sample_strategy=self.sample_cfg
             )
         return texts
 
