@@ -16,8 +16,15 @@ class DatasetModule(Dataset):
             tokenizer: PreTrainedTokenizer,
             cfg
     ):
-        source_max_token_len = cfg.max_token_len
-        target_max_token_len = cfg.max_token_len
+        if (
+                (cfg.src_max_token_len is None or cfg.tgt_max_token_len is None) and
+                cfg.max_token_len is not None
+        ):
+            source_max_token_len = cfg.max_token_len
+            target_max_token_len = cfg.max_token_len
+        else:
+            source_max_token_len = cfg.src_max_token_len
+            target_max_token_len = cfg.tgt_max_token_len
         self.data = data
 
         self.source = tokenizer(
