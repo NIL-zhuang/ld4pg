@@ -38,8 +38,6 @@ def build_dataset(cfg: DictConfig):
     dataset_module = DataModule(
         cfg=cfg.params,
         tokenizer=tokenizer,
-        train_dataset=dataset[0],
-        valid_dataset=dataset[1],
         test_dataset=dataset[2],
         inf_train_dataloader=False,
     )

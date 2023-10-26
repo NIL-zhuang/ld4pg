@@ -12,6 +12,7 @@ class LDPControlnetInferencePipeline(torch.nn.Module):
     def __init__(
             self,
             model_cfg: DictConfig,
+            control_cfg: DictConfig,
             ldp: LatentDiffusion,
             ldp_controlnet_pipelines: List[LDPControlNetPipeline],
     ):
@@ -20,6 +21,12 @@ class LDPControlnetInferencePipeline(torch.nn.Module):
         self.ldp = ldp
         self.controlnet_pipelines = ldp_controlnet_pipelines
         self.num_timesteps = ldp.num_timesteps
+        self.control_start = control_cfg.start_step
+        self.control_end = control_cfg.end_step
+
+        self.alphas_cumprod = self.ldp.alphas_cumprod
+        self.betas = self.ldp.betas
+        self.parameterization = self.ldp.parameterization
 
     @torch.no_grad()
     def apply_model(
@@ -45,7 +52,7 @@ class LDPControlnetInferencePipeline(torch.nn.Module):
         for cn_latent, cn_mask, controlnet_pipeline in zip(
                 cn_latents, cn_masks, self.controlnet_pipelines
         ):
-            controlnet_recon = controlnet_pipeline.apply_cn_model(
+            controlnet_recon = controlnet_pipeline.controlnet.apply_cn_model(
                 x_noisy, t, condition, mask, condition_mask, cn_latent, cn_mask, *args, **kwargs
             )
             recon += controlnet_recon
@@ -84,10 +91,16 @@ class LDPControlnetInferencePipeline(torch.nn.Module):
             sampler = DPMSolverSampler(self, schedule=self.ldp.schedule)
         else:
             raise NotImplementedError
+
+        model_kwargs = {
+            'mask': latent_mask,
+            'condition_mask': condition_mask,
+            'cn_latents': cn_latents,
+            'cn_masks': cn_masks
+        }
         sample, intermediates = sampler.sample(
             steps, batch_size, (self.ldp.max_seqlen, self.ldp.latent_dim),
-            condition=condition, condition_mask=condition_mask, latent_mask=latent_mask,
-            cn_latents=cn_latents, cn_masks=cn_masks,
+            condition=condition, model_kwargs=model_kwargs,
             **kwargs
         )
         return sample, intermediates, latent_mask

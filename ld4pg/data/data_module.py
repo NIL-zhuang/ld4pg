@@ -64,9 +64,9 @@ class DataModule(AbstractDataModule):
             self,
             cfg,
             tokenizer: PreTrainedTokenizer,
-            train_dataset: pd.DataFrame,
-            valid_dataset: pd.DataFrame,
-            test_dataset: pd.DataFrame,
+            train_dataset: pd.DataFrame = None,
+            valid_dataset: pd.DataFrame = None,
+            test_dataset: pd.DataFrame = None,
             inf_train_dataloader: bool = False,
     ):
         super().__init__(cfg, tokenizer)
@@ -74,6 +74,9 @@ class DataModule(AbstractDataModule):
         self.batch_size = self.cfg.batch_size
         self.num_workers = self.cfg.num_workers
         self.infinite_dataloader = inf_train_dataloader
-        self.train_dataset = DatasetModule(train_dataset, tokenizer, cfg)
-        self.valid_dataset = DatasetModule(valid_dataset, tokenizer, cfg)
-        self.test_dataset = DatasetModule(test_dataset, tokenizer, cfg)
+        if train_dataset is not None:
+            self.train_dataset = DatasetModule(train_dataset, tokenizer, cfg)
+        if valid_dataset is not None:
+            self.valid_dataset = DatasetModule(valid_dataset, tokenizer, cfg)
+        if test_dataset is not None:
+            self.test_dataset = DatasetModule(test_dataset, tokenizer, cfg)

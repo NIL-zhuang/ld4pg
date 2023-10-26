@@ -431,9 +431,14 @@ class LatentDiffusion(pl.LightningModule):
                 sampler = DDIMSampler(self, schedule=self.schedule)
             elif sampler == 'dpm':
                 sampler = DPMSolverSampler(self, schedule=self.schedule)
+
+            model_kwargs = {
+                'mask': latent_mask,
+                'cond_mask': condition_mask
+            }
             sample, intermediates = sampler.sample(
                 steps, batch_size, (self.max_seqlen, self.latent_dim),
-                condition=condition, condition_mask=condition_mask, latent_mask=latent_mask,
+                condition=condition, model_kwargs=model_kwargs,
                 **kwargs
             )
         return sample, intermediates, latent_mask
