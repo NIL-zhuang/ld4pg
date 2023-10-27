@@ -49,11 +49,13 @@ class ControlNetKeywordDatasetModule(Dataset):
             return_attention_mask=True,
             add_special_tokens=True
         )
-        self.target['input_ids'][self.target['input_ids'] == 0] = -100
+        # self.target['input_ids'][self.target['input_ids'] == 0] = -100
 
         self.keyword_mask_ratio = keyword_mask_ratio
         self.kw_ids, self.kw_masks = self.build_keyword_mask(
-            data['tgt'].tolist(), self.target['input_ids'], self.target['attention_mask'],
+            data['tgt'].tolist(),
+            self.target['input_ids'].clone().detach(),
+            self.target['attention_mask'].clone().detach(),
             tokenizer,
         )
 
@@ -148,7 +150,6 @@ class ControlNetKeywordDataModule(AbstractDataModule):
             valid_dataset: pd.DataFrame = None,
             test_dataset: pd.DataFrame = None,
             inf_train_dataloader: bool = False,
-            keyword_mask_ratio: float = 0.15,
     ):
         super().__init__(cfg, tokenizer, train_dataset, valid_dataset, test_dataset, inf_train_dataloader)
         self.cfg = cfg

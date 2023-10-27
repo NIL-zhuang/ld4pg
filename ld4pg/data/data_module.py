@@ -45,7 +45,7 @@ class DatasetModule(Dataset):
             return_attention_mask=True,
             add_special_tokens=True
         )
-        self.target['input_ids'][self.target['input_ids'] == 0] = -100
+        # self.target['input_ids'][self.target['input_ids'] == 0] = -100
 
     def __len__(self):
         return len(self.data)

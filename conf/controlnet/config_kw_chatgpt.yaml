@@ -70,7 +70,7 @@ train:
     precision: 32
     learning_rate: 1.0e-4
     lr_warmup_steps: 0
-    num_train_steps: 100000
+    num_train_steps: 50000
     accumulate_grad_batches: 1
 control:
   start_step: 0.1

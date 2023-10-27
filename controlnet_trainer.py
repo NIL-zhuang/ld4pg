@@ -44,7 +44,7 @@ def build_dataset(cfg: DictConfig):
     dataset_module = ControlNetKeywordDataModule(
         cfg=cfg.params,
         tokenizer=tokenizer,
-        train_dataset=dataset[0],
+        train_dataset=dataset[0][:1000] if FAST_DEV_RUN else dataset[0],
         valid_dataset=dataset[1],
         test_dataset=dataset[2],
         inf_train_dataloader=False,
@@ -58,7 +58,6 @@ def parse_args():
     parser.add_argument("--ckpt", type=str, default=None, help="backbone ckpt")
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("-n", "--name", type=str, default="", help="dir postfix")
-    parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
     parser.add_argument(
         "-m", "--mode", type=str, default='train',
@@ -75,7 +74,7 @@ def build_trainer(cfg, save_path="saved_models"):
             dirpath=save_path,
             monitor='val/loss_ema',
             filename='step{step}-valema{val/loss_ema:.2f}',
-            every_n_train_steps=20000,
+            every_n_train_steps=5000,
             auto_insert_metric_name=False,
             save_top_k=-1,
             save_on_train_epoch_end=True,
