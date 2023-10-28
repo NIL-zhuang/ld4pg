@@ -2,7 +2,11 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from ld4pg.modules.diffusion_modules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like, extract_into_tensor
+from ld4pg.modules.diffusion_modules.util import (
+    make_ddim_sampling_parameters,
+    make_ddim_timesteps,
+    noise_like
+)
 
 
 class DDIMSampler(object):
@@ -11,6 +15,7 @@ class DDIMSampler(object):
         self.model = model
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
+        self.ddim_timesteps = None
 
     def register_buffer(self, name, attr):
         if type(attr) == torch.Tensor:
@@ -19,12 +24,13 @@ class DDIMSampler(object):
         setattr(self, name, attr)
 
     def make_schedule(self, ddim_num_steps, ddim_discretize="uniform", ddim_eta=0., verbose=True):
-        def to_torch(x):
-            return x.clone().detach().to(torch.float32).to(self.model.device)
+        to_torch = lambda x: x.clone().detach().to(torch.float32).to(self.model.device)
 
         self.ddim_timesteps = make_ddim_timesteps(
-            ddim_discr_method=ddim_discretize, num_ddim_timesteps=ddim_num_steps,
-            num_ddpm_timesteps=self.ddpm_num_timesteps, verbose=False
+            ddim_discr_method=ddim_discretize,
+            num_ddim_timesteps=ddim_num_steps,
+            num_ddpm_timesteps=self.ddpm_num_timesteps,
+            verbose=verbose
         )
         alphas_cumprod = self.model.alphas_cumprod
         assert alphas_cumprod.shape[0] == self.ddpm_num_timesteps, 'alphas have to be defined for each timestep'
@@ -80,6 +86,8 @@ class DDIMSampler(object):
             log_every_t=100,
             unconditional_guidance_scale=1.,
             unconditional_conditioning=None,
+            dynamic_threshold=None,
+            ucg_scheduler=None,
             # this has to come in the same format as the conditioning, # e.g. as encoded tokens, ...
             **kwargs
     ):
@@ -88,6 +96,10 @@ class DDIMSampler(object):
                 cbs = condition[list(condition.keys())[0]].shape[0]
                 if cbs != batch_size:
                     print(f"Warning: Got {cbs} conditioning but batch-size is {batch_size}")
+            elif isinstance(condition, list):
+                for ctmp in condition:
+                    if ctmp.shape[0] != batch_size:
+                        print(f"Warning: Got {ctmp.shape[0]} conditioning but batch-size is {batch_size}")
             else:
                 if condition.shape[0] != batch_size:
                     print(f"Warning: Got {condition.shape[0]} conditioning but batch-size is {batch_size}")
@@ -116,6 +128,8 @@ class DDIMSampler(object):
             log_every_t=log_every_t,
             unconditional_guidance_scale=unconditional_guidance_scale,
             unconditional_conditioning=unconditional_conditioning,
+            dynamic_threshold=dynamic_threshold,
+            ucg_scheduler=ucg_scheduler,
             verbose=verbose
         )
         return samples, intermediates
@@ -127,7 +141,9 @@ class DDIMSampler(object):
             callback=None, timesteps=None, quantize_denoised=False,
             mask=None, x0=None, img_callback=None, log_every_t=100,
             temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-            unconditional_guidance_scale=1., unconditional_conditioning=None, verbose=False,
+            unconditional_guidance_scale=1., unconditional_conditioning=None,
+            dynamic_threshold=None, ucg_scheduler=None,
+            verbose=False,
     ):
         device = self.model.betas.device
         b = shape[0]
@@ -159,13 +175,18 @@ class DDIMSampler(object):
                 img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass?
                 latent = img_orig * mask + (1. - mask) * latent
 
+            if ucg_scheduler is not None:
+                assert len(ucg_scheduler) == len(time_range)
+                unconditional_guidance_scale = ucg_scheduler[i]
+
             outs = self.p_sample_ddim(
                 latent, cond, ts, index=index, model_kwargs=model_kwargs,
                 use_original_steps=ddim_use_original_steps, quantize_denoised=quantize_denoised,
                 temperature=temperature, noise_dropout=noise_dropout,
                 score_corrector=score_corrector, corrector_kwargs=corrector_kwargs,
                 unconditional_guidance_scale=unconditional_guidance_scale,
-                unconditional_conditioning=unconditional_conditioning
+                unconditional_conditioning=unconditional_conditioning,
+                dynamic_threshold=dynamic_threshold
             )
             latent, pred_x0 = outs
             if callback:
@@ -193,12 +214,9 @@ class DDIMSampler(object):
         else:
             raise NotImplementedError("Unconditional guidance not implemented for DDIM")
 
-        pred_x0 = self.model.apply_model(x, t, c, x_mask, c_mask)
-        e_t = self.predict_eps_from_start(x, t, pred_x0)
-
         if score_corrector is not None:
-            assert self.model.parameterization == "eps"
-            e_t = score_corrector.modify_score(self.model, e_t, x, t, c, **corrector_kwargs)
+            assert self.model.parameterization == "eps", "not implemented"
+            model_output = score_corrector.modify_score(self.model, model_output, x, t, c, **corrector_kwargs)
 
         alphas = self.model.alphas_cumprod if use_original_steps else self.ddim_alphas
         alphas_prev = self.model.alphas_cumprod_prev if use_original_steps else self.ddim_alphas_prev
@@ -211,7 +229,15 @@ class DDIMSampler(object):
         sqrt_one_minus_at = torch.full((b, 1, 1), sqrt_one_minus_alphas[index], device=device)
 
         # current prediction for x_0
-        # pred_x0 = (x - sqrt_one_minus_at * e_t) / a_t.sqrt()
+        if self.model.parameterization == 'eps':
+            pred_x0 = (x - sqrt_one_minus_at * model_output) / a_t.sqrt()
+            e_t = model_output
+        elif self.model.parameterization == 'x0':
+            pred_x0 = model_output
+            e_t = (x - a_t.sqrt() * pred_x0) / sqrt_one_minus_at
+        else:
+            raise NotImplementedError
+
         if quantize_denoised:
             pred_x0, _, *_ = self.model.first_stage_model.quantize(pred_x0)
         # direction pointing to x_t
@@ -221,9 +247,3 @@ class DDIMSampler(object):
             noise = torch.nn.functional.dropout(noise, p=noise_dropout)
         x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
         return x_prev, pred_x0
-
-    def predict_eps_from_start(self, x_t, t, x0):
-        return (
-                (extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t - x0) /
-                extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape)
-        )

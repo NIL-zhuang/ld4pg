@@ -28,6 +28,8 @@ def parse_args():
     parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result", help="target file dir")
     parser.add_argument("--fname", type=str, default=None, help="target file name")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
+    parser.add_argument("--sampler", type=str, default='dpm', choices=['ddim', 'dpm'], help="sampler type")
+    parser.add_argument("--steps", type=int, default=25, help="number of steps")
     args = parser.parse_args()
     return args
 
@@ -58,7 +60,7 @@ def load_model(enc_dec_model: str, ckpt: str):
     return model
 
 
-def predict(model, data_loader, steps: int = 25):
+def predict(model, data_loader, steps: int = 25, sampler='dpm'):
     results = []
     with torch.no_grad(), model.ema_scope():
         for batch in track(data_loader, description="Generating..."):
@@ -67,7 +69,7 @@ def predict(model, data_loader, steps: int = 25):
             texts = model.generate_text(
                 c, c_mask, x_mask, batch_size=c.shape[0],
                 sample_strategy=SAMPLE_STRATEGY['nucleus'],
-                verbose=False, sampler='dpm', steps=steps,
+                verbose=False, sampler=sampler, steps=steps,
             )
             results += texts
     return results
@@ -100,7 +102,7 @@ def main(opt: argparse.Namespace):
 
         model: LatentDiffusion = load_model(cfg.model.diffusion.params.enc_dec_model, m_path).to(device)
 
-        results = predict(model, dataset.test_dataloader(), steps=25)
+        results = predict(model, dataset.test_dataloader(), steps=opt.steps, sampler=opt.sampler)
         with open(os.path.join(opt.tgt, f"{m_name}.txt"), 'w+', encoding='utf-8') as f:
             f.write('\n'.join(results))
 
