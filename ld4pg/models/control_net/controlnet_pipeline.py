@@ -30,10 +30,13 @@ class LDPControlNetPipeline(pl.LightningModule):
         self.model_cfg = model_cfg
         self.text_cond_stage_model = text_cond_stage_model
         self.first_stage_model = first_stage_model
+        self.first_stage_model.eval()
         self.tokenizer = tokenizer
         self.ldp = ldp
+        self.ldp.eval()
         self.controlnet = controlnet
         self.controlnet_cond_stage_model = controlnet_cond_stage_model
+        self.controlnet_cond_stage_model.eval()
 
         self.num_timesteps = ldp.num_timesteps
         self.learning_rate = learning_rate
@@ -145,7 +148,8 @@ class LDPControlNetPipeline(pl.LightningModule):
 
         latent, mask = self.ldp.get_first_stage_encoding(label, label_mask)
         cond, cond_mask = self.ldp.get_conditioning(src, src_mask)
-        cn_latent, cn_mask = self.get_controlnet_stage_encoding(cn_input, cn_mask)
+        # cn_latent, cn_mask = self.get_controlnet_stage_encoding(cn_input, cn_mask)
+        cn_latent, cn_mask = self.ldp.get_first_stage_encoding(cn_input, cn_mask)
         return latent, mask, cond, cond_mask, cn_latent, cn_mask
 
     def configure_optimizers(self):

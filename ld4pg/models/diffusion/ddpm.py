@@ -309,14 +309,17 @@ class LatentDiffusion(pl.LightningModule):
         encoder = self.cond_stage_model
         # In training stage, drop conditional guidance with unconditional prob
         # replace unconditional guidance with null token sequences
+        if not self.training or self.unconditional_prob <= 0.:
+            condition = encoder(condition, attention_mask=mask).last_hidden_state
+            return condition, mask
+
         embeddings = encoder.embed_tokens(condition) * encoder.embed_scale
-        if self.training and self.unconditional_prob == 0.:
-            unconditional_embedding = repeat(
-                self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0],
-                s=condition.shape[1]
-            )
-            unconditional_mask = self.unconditional_bernoulli.sample([condition.shape[0]]).bool()
-            embeddings[unconditional_mask] = unconditional_embedding[unconditional_mask]
+        unconditional_embedding = repeat(
+            self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0],
+            s=condition.shape[1]
+        )
+        unconditional_mask = self.unconditional_bernoulli.sample([condition.shape[0]]).bool()
+        embeddings[unconditional_mask] = unconditional_embedding[unconditional_mask]
         condition = encoder(inputs_embeds=embeddings, attention_mask=mask).last_hidden_state
         return condition, mask
 

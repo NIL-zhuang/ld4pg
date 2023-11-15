@@ -31,6 +31,7 @@ def parse_args():
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
     parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
+    parser.add_argument("--save_path", type=str, default="saved_models", help="path to save model")
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
@@ -159,7 +160,11 @@ def main(opt: argparse.Namespace) -> None:
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
     if opt.mode == 'train':
-        save_path = get_save_path(cfg.train.output_dir, cfg.data.name, cfg.train.name if opt.name == '' else opt.name)
+        save_path = get_save_path(
+            cfg.train.output_dir if opt.save_path is None else opt.save_path,
+            cfg.data.name,
+            cfg.train.name if opt.name == '' else opt.name
+        )
     else:
         save_path = os.sep.join(opt.ckpt.split('/')[:2])
     print(f"Model save path: {save_path}")

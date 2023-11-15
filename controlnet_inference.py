@@ -9,7 +9,7 @@ from rich.progress import track
 from tqdm import tqdm
 from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.config import SAMPLE_STRATEGY
+from ld4pg.config import *
 from ld4pg.data import get_dataset
 from ld4pg.data.controlnet_data_module import ControlNetKeywordDataModule
 from ld4pg.models.control_net.controlnet import ControlNetModel
@@ -25,6 +25,7 @@ def build_dataset(cfg: DictConfig, evaluation=False):
     dataset_module = ControlNetKeywordDataModule(
         cfg=cfg.params,
         tokenizer=tokenizer,
+        data_path=os.path.join(DATASET_PATH, cfg.name),
         train_dataset=dataset[0] if not evaluation else None,
         valid_dataset=dataset[1] if not evaluation else None,
         test_dataset=dataset[2] if evaluation else None,
@@ -35,7 +36,8 @@ def build_dataset(cfg: DictConfig, evaluation=False):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/config_kw_chatgpt.yaml", help="config to construct model")
+    parser.add_argument("--config", type=str, default="conf/config_kw_pad_chatgpt.yaml",
+                        help="config to construct model")
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--ckpt_dir", type=str, default=None, help="path to model checkpoint save dir")
     parser.add_argument("--ldp", type=str, default=None, help="path to ldp model checkpoint")
@@ -137,6 +139,7 @@ def main(opt: argparse.Namespace):
         ckpt_list = [opt.ckpt]
     elif opt.ckpt_dir is not None:
         ckpt_list = glob(f"{opt.ckpt_dir}/*.ckpt")
+        print(f"Generating with {len(ckpt_list)} checkpoints")
     else:
         raise ValueError("ckpt or ckpt_dir must be specified")
 
@@ -147,7 +150,7 @@ def main(opt: argparse.Namespace):
         print(f"generating {m_name}...")
 
         model: LDPControlnetInferencePipeline = load_controlnet_inference_pipeline(
-            cfg.model, cfg.control, opt.ldp, opt.ckpt
+            cfg.model, cfg.control, opt.ldp, m_path
         ).to(device)
         model.eval()
         results = predict(model, dataset.test_dataloader(), steps=25)

@@ -1,20 +1,23 @@
 import argparse
+import os
+from datetime import datetime
 
 import pytorch_lightning as pl
 import torch
 from omegaconf import DictConfig, OmegaConf
-from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
-import os
-from datetime import datetime
-from ld4pg.data import get_dataset
-from ld4pg.models.control_net.controlnet import ControlNetModel
-from ld4pg.models.diffusion.ddpm import LatentDiffusion
+from pympler import asizeof
 from pytorch_lightning import loggers as pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
-from ld4pg.util import arg_transform
+from transformers import BartForConditionalGeneration, BartTokenizerFast as BartTokenizer
+
+from ld4pg.config import *
+from ld4pg.data import get_dataset
 from ld4pg.data.controlnet_data_module import ControlNetKeywordDataModule
+from ld4pg.models.control_net.controlnet import ControlNetModel
 from ld4pg.models.control_net.controlnet_pipeline import LDPControlNetPipeline
+from ld4pg.models.diffusion.ddpm import LatentDiffusion
+from ld4pg.util import arg_transform
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -39,12 +42,14 @@ def get_save_path(output_dir: str, dataset_name: str, model_name: str):
 
 
 def build_dataset(cfg: DictConfig):
-    tokenizer = AutoTokenizer.from_pretrained(cfg.params.tokenizer)
+    tokenizer = BartTokenizer.from_pretrained(cfg.params.tokenizer)
     dataset = get_dataset(cfg.name)
     dataset_module = ControlNetKeywordDataModule(
         cfg=cfg.params,
         tokenizer=tokenizer,
+        data_path=os.path.join(DATASET_PATH, cfg.name),
         train_dataset=dataset[0][:1000] if FAST_DEV_RUN else dataset[0],
+        # train_dataset=dataset[0],
         valid_dataset=dataset[1],
         test_dataset=dataset[2],
         inf_train_dataloader=False,
@@ -59,6 +64,7 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("-n", "--name", type=str, default="", help="dir postfix")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
+    parser.add_argument("--save_path", type=str, default="saved_models", help="path to save model")
     parser.add_argument(
         "-m", "--mode", type=str, default='train',
         choices=['train', 'resume'], help="train or resume"
@@ -146,22 +152,25 @@ def build_controlnet_train_pipeline(config: DictConfig, ckpt_path: str):
     return ldp_controlnet_pipeline
 
 
-def main(opt: argparse.Namespace) -> None:
-    pl.seed_everything(opt.seed)
+def main(opt: argparse.Namespace):
     cfg: DictConfig = OmegaConf.load(f"{opt.config}")
     for param in opt.update:
         k, v = param.split("=")
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
-    save_dir = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
+    save_dir = get_save_path(
+        cfg.train.output_dir if opt.save_path is None else opt.save_path,
+        cfg.data.name,
+        opt.name
+    )
     print(f"Model save path: {save_dir}")
 
-    pipeline = build_controlnet_train_pipeline(cfg.model, opt.ckpt)
-    print(f"pipeline already build")
-    trainer = build_trainer(cfg.train.params, save_dir)
-    print(f"trainer already build")
     dataset = build_dataset(cfg.data)
-    print(f"dataset already build")
+    print(f"Size of dataset is {asizeof.asizeof(dataset) / 1024 / 1024} GB")
+    pipeline = build_controlnet_train_pipeline(cfg.model, opt.ckpt).cuda()
+    print(f"Size of controlnet train pipeline is {asizeof.asizeof(pipeline) / 1024 / 1024} GB")
+    trainer = build_trainer(cfg.train.params, save_dir)
+    print(f"Size of controlnet trainer is {asizeof.asizeof(trainer) / 1024 / 1024} GB")
 
     if os.environ.get('LOCAL_RANK', 0) == 0 and FAST_DEV_RUN is False:
         OmegaConf.save(config=cfg, f=os.path.join(save_dir, 'conf.yaml'))
@@ -170,4 +179,5 @@ def main(opt: argparse.Namespace) -> None:
 
 if __name__ == '__main__':
     option = parse_args()
+    pl.seed_everything(option.seed)
     main(option)

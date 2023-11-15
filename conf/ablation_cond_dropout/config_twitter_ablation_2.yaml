@@ -1,7 +1,8 @@
 model:
   params:
     max_seq_len: 64
-    unconditional_prob: 0.1
+    self_condition: False
+    unconditional_prob: 0.2
   diffusion:
     params:
       timesteps: 1000
@@ -51,7 +52,7 @@ data:
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 128
+    batch_size: 160
     num_workers: 4
 train:
   name: ""
@@ -60,5 +61,5 @@ train:
     precision: 32
     learning_rate: 1.0e-4
     lr_warmup_steps: 0
-    num_train_steps: 400000
+    num_train_steps: 300000
     accumulate_grad_batches: 1
