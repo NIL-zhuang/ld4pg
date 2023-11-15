@@ -1,15 +1,37 @@
+import torch
 import torch.nn as nn
-import pytorch_lightning as pl
 from omegaconf import DictConfig
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 from ld4pg.models.diffusion import LatentDiffusion
-from ld4pg.util import default, disabled_train
+from ld4pg.util import disabled_train
 
 
-class ZeroInit(nn.Module):
+class ZeroInitConv(nn.Module):
     """
     Zero init module for the control net.
+    with Conv1D
+    """
+
+    def __init__(self, latent_dim):
+        super().__init__()
+        # self.net = nn.Linear(latent_dim, latent_dim, bias=True)
+        self.net = nn.Conv1d(latent_dim, latent_dim, 1, bias=True)
+        self.net.weight.data.zero_()
+        self.net.bias.data.zero_()
+
+    def forward(self, x):
+        # x: bsz x seqlen x hidden
+        x = x.transpose(1, 2)
+        out = self.net(x)
+        out = out.transpose(1, 2)
+        return out
+
+
+class ZeroInitFFN(nn.Module):
+    """
+    Zero init module for the control net.
+    with FFN
     """
 
     def __init__(self, latent_dim):
@@ -19,7 +41,9 @@ class ZeroInit(nn.Module):
         self.net.bias.data.zero_()
 
     def forward(self, x):
-        return self.net(x)
+        # x: bsz x seqlen x hidden
+        out = self.net(x)
+        return out
 
 
 class ControlNetModel(LatentDiffusion):
@@ -49,6 +73,8 @@ class ControlNetModel(LatentDiffusion):
             sample_strategy=None,
             additional_input_key: str = "",
             additional_input_mask: str = "",
+            zero_init: str = "ffn",
+            control_seq_mean: bool = False,
             *args,
             **kwargs,
     ):
@@ -68,8 +94,17 @@ class ControlNetModel(LatentDiffusion):
 
         self.additional_input_key = additional_input_key
         self.additional_input_mask = additional_input_mask
-        self.zero_in = ZeroInit(self.latent_dim)
-        self.zero_out = ZeroInit(self.latent_dim)
+
+        self.control_seq_mean = control_seq_mean
+
+        if zero_init in ['conv', 'conv1d']:
+            self.zero_in = ZeroInitConv(self.latent_dim)
+            self.zero_out = ZeroInitConv(self.latent_dim)
+        elif zero_init == 'ffn':
+            self.zero_in = ZeroInitFFN(self.latent_dim)
+            self.zero_out = ZeroInitFFN(self.latent_dim)
+        else:
+            raise NotImplementedError(f"zero init {zero_init} not implemented")
 
     def apply_cn_model(
             self,
@@ -84,7 +119,17 @@ class ControlNetModel(LatentDiffusion):
             **kwargs
     ):
         cn_latent_input = self.zero_in(cn_latent)
-        latent = x_noisy + cn_latent_input * cn_mask.unsqueeze(-1)
+
+        if self.control_seq_mean:
+            cn_latent_mean = (
+                    torch.sum(cn_latent_input * cn_mask.unsqueeze(-1), dim=1) /
+                    torch.sum(cn_mask.unsqueeze(-1), dim=1)
+            )
+            latent = x_noisy + cn_latent_mean.unsqueeze(1)
+        else:
+            cn_latent_input = self.zero_in(cn_latent_input)
+            latent = x_noisy + cn_latent_input * cn_mask.unsqueeze(-1)
+
         cn_latent_out = self.apply_model(latent, t, condition, mask, condition_mask, *args, **kwargs)
         output = self.zero_out(cn_latent_out)
         return output

@@ -40,7 +40,7 @@ class AbstractDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            pin_memory=True
+            pin_memory=False
         )
         return infinite_dataloader(dataloader) if self.infinite_dataloader else dataloader
 

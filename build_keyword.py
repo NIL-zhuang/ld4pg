@@ -13,7 +13,7 @@ _WORD_START = 'Ġ'
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/controlnet/config_kw_pad_chatgpt.yaml")
+    parser.add_argument("--config", type=str, default="conf/controlnet/qqp_chatgpt_mask_control_conv.yaml")
     parser.add_argument("--save_path", type=str, default="/home/zhuangzy/")
     args = parser.parse_args()
     return args

@@ -36,7 +36,7 @@ def build_dataset(cfg: DictConfig, evaluation=False):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/config_kw_pad_chatgpt.yaml",
+    parser.add_argument("--config", type=str, default="conf/qqp_chatgpt_mask_control_conv.yaml",
                         help="config to construct model")
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--ckpt_dir", type=str, default=None, help="path to model checkpoint save dir")
@@ -81,6 +81,8 @@ def load_controlnet_pipeline(config: DictConfig, base_ldp_path: str, ckpt_path: 
             first_stage_tokenizer=first_stage_tokenizer,
             additional_input_key=cn_input_key,
             additional_input_mask=cn_input_mask,
+            zero_init=controlnet_cfg.zero_init,
+            control_seq_mean=controlnet_cfg.control_mean,
             strict=False,
         )
         return model

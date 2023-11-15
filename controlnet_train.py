@@ -59,8 +59,9 @@ def build_dataset(cfg: DictConfig):
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/ldp/config_chatgpt.yaml", help="conf file")
-    parser.add_argument("--ckpt", type=str, default=None, help="backbone ckpt")
+    parser.add_argument("--config", type=str, default="conf/controlnet/qqp_chatgpt_mask_control_conv.yaml", help="conf file")
+    parser.add_argument("--ckpt", type=str, default="saved_models/qqp_ldp/step210000-valema129.11.ckpt",
+                        help="backbone ckpt")
     parser.add_argument("--seed", type=int, default=42, help="seed")
     parser.add_argument("-n", "--name", type=str, default="", help="dir postfix")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
@@ -122,6 +123,8 @@ def build_controlnet_train_pipeline(config: DictConfig, ckpt_path: str):
             first_stage_tokenizer=first_stage_tokenizer,
             additional_input_key=cn_input_key,
             additional_input_mask=cn_input_mask,
+            zero_init=controlnet_cfg.zero_init,
+            control_seq_mean=controlnet_cfg.control_mean,
             strict=False,
         )
         return model

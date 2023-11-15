@@ -1,6 +1,7 @@
 import os
 
 import math
+import omegaconf
 import pandas as pd
 import torch
 from nltk import word_tokenize
@@ -22,18 +23,32 @@ class ControlNetKeywordDatasetModule(Dataset):
 
     def __init__(
             self,
-            data: pd.DataFrame,
-            tokenizer: PreTrainedTokenizer,
-            cfg,
+            data_path: str = None,
+            data: pd.DataFrame = None,
+            tokenizer: PreTrainedTokenizer = None,
+            cfg: omegaconf.DictConfig = None,
             keyword_mask_ratio: float = 0.15
     ):
-        source_max_token_len = cfg.max_token_len
-        target_max_token_len = cfg.max_token_len
-        self.data = data
+        self.source_max_token_len = cfg.max_token_len
+        self.target_max_token_len = cfg.max_token_len
+        self.keyword_mask_ratio = keyword_mask_ratio
+        self.special_token = cfg.special_token
 
+        if data_path is not None and os.path.exists(data_path):
+            print(f"loading {data_path} ...")
+            data = torch.load(data_path)
+            self.source = data['source']
+            self.target = data['target']
+            self.kw_ids = data['kw_ids']
+            self.kw_masks = data['kw_masks']
+        else:
+            print(f"building {data_path} ...")
+            self.build_dataset(tokenizer, data, data_path)
+
+    def build_dataset(self, tokenizer, data, data_path):
         self.source = tokenizer(
             data['src'].tolist(),
-            max_length=source_max_token_len,
+            max_length=self.source_max_token_len,
             padding='max_length',
             truncation=True,
             return_tensors='pt',
@@ -42,7 +57,7 @@ class ControlNetKeywordDatasetModule(Dataset):
         )
         self.target = tokenizer(
             data['tgt'].tolist(),
-            max_length=target_max_token_len,
+            max_length=self.target_max_token_len,
             padding='max_length',
             truncation=True,
             return_tensors='pt',
@@ -51,13 +66,21 @@ class ControlNetKeywordDatasetModule(Dataset):
         )
         # self.target['input_ids'][self.target['input_ids'] == 0] = -100
 
-        self.keyword_mask_ratio = keyword_mask_ratio
         self.kw_ids, self.kw_masks = self.build_keyword_mask(
-            data['tgt'].tolist(),
-            self.target['input_ids'].clone().detach(),
+            data['src'].tolist(),
+            self.source['input_ids'].clone().detach(),
             self.target['attention_mask'].clone().detach(),
-            tokenizer,
+            tokenizer
         )
+        data = {
+            'source': self.source,
+            'target': self.target,
+            'kw_ids': self.kw_ids,
+            'kw_masks': self.kw_masks
+        }
+
+        if data_path is not None:
+            torch.save(data, data_path)
 
     def build_keyword_mask(self, target_sentence, target_kw, target_kw_mask, tokenizer):
         kw_token_ids_list = []
@@ -67,14 +90,14 @@ class ControlNetKeywordDatasetModule(Dataset):
                 total=len(target_sentence), description=f"building keyword dataset"
         ):
             kw_token_ids, kw_attention_mask = self.build_kw_sentence(
-                sent, ids, mask, tokenizer, self.keyword_mask_ratio
+                sent, ids, mask, tokenizer, self.keyword_mask_ratio, special_token=self.special_token
             )
             kw_token_ids_list.append(kw_token_ids)
             kw_attention_mask_list.append(kw_attention_mask)
-        return kw_token_ids_list, kw_attention_mask_list
+        return torch.stack(kw_token_ids_list), torch.stack(kw_attention_mask_list)
 
     def __len__(self):
-        return len(self.data)
+        return len(self.source['input_ids'])
 
     def __getitem__(self, index):
         return dict(
@@ -87,7 +110,8 @@ class ControlNetKeywordDatasetModule(Dataset):
         )
 
     @classmethod
-    def replace_split_tokens_with_mask(cls, sentence, tokenizer, k: float = 0.15):
+    def replace_split_tokens_with_mask(cls, sentence, tokenizer, k: float = 0.15, special_token: str = "pad_token"):
+        assert special_token in tokenizer.special_tokens_map.keys()
         kw_tokens = tokenizer.tokenize(sentence)
         # add <BOS> token here
         kw_tokens = [tokenizer.bos_token] + kw_tokens
@@ -111,7 +135,8 @@ class ControlNetKeywordDatasetModule(Dataset):
                 kw_attention_mask[token_idx] = 1
             else:
                 # 不是关键信息的 token 就替换成 pad
-                kw_tokens[token_idx] = tokenizer.special_tokens_map['pad_token']
+                # kw_tokens[token_idx] = tokenizer.special_tokens_map['pad_token']
+                kw_tokens[token_idx] = tokenizer.special_tokens_map[special_token]
 
             if cur_word.startswith(cur_token):
                 n_cur_word = cur_word[len(cur_token):]
@@ -125,12 +150,20 @@ class ControlNetKeywordDatasetModule(Dataset):
         return kw_token_ids, kw_attention_mask
 
     @classmethod
-    def build_kw_sentence(cls, sentence, token_id, token_mask, tokenizer, k: float = 0.15):
+    def build_kw_sentence(
+            cls,
+            sentence,
+            token_id,
+            token_mask,
+            tokenizer,
+            k: float = 0.15,
+            special_token: str = "pad_token"
+    ):
         """ return masked tokens and attention mask
         replace all masked tokens with <PAD>
         """
         kw_token_ids, kw_attention_masks = cls.replace_split_tokens_with_mask(
-            sentence, tokenizer, k
+            sentence, tokenizer, k, special_token
         )
 
         kw_token_ids = torch.tensor(kw_token_ids)
@@ -145,6 +178,7 @@ class ControlNetKeywordDataModule(AbstractDataModule):
     def __init__(
             self,
             cfg,
+            data_path: str,
             tokenizer: PreTrainedTokenizer,
             train_dataset: pd.DataFrame = None,
             valid_dataset: pd.DataFrame = None,
@@ -158,8 +192,14 @@ class ControlNetKeywordDataModule(AbstractDataModule):
 
         kw_ratio = cfg.kw_ratio
         if train_dataset is not None:
-            self.train_dataset = ControlNetKeywordDatasetModule(train_dataset, tokenizer, cfg, kw_ratio)
+            self.train_dataset = ControlNetKeywordDatasetModule(
+                os.path.join(data_path, 'train.pth'), train_dataset, tokenizer, cfg, kw_ratio
+            )
         if valid_dataset is not None:
-            self.valid_dataset = ControlNetKeywordDatasetModule(valid_dataset, tokenizer, cfg, kw_ratio)
+            self.valid_dataset = ControlNetKeywordDatasetModule(
+                os.path.join(data_path, 'valid.pth'), valid_dataset, tokenizer, cfg, kw_ratio
+            )
         if test_dataset is not None:
-            self.test_dataset = ControlNetKeywordDatasetModule(test_dataset, tokenizer, cfg, kw_ratio)
+            self.test_dataset = ControlNetKeywordDatasetModule(
+                os.path.join(data_path, 'test.pth'), test_dataset, tokenizer, cfg, kw_ratio
+            )
