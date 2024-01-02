@@ -53,10 +53,12 @@ model:
       additional_input_key: "keyword_label_ids"
       additional_input_mask: "keyword_label_attention_mask"
       learning_rate: 1e-5
+      zero_init: "ffn"
+      control_mean: False
       scale_factor: 0.119805
       scale_mean: 0.002614
 data:
-  name: "chatgpt_kw"
+  name: "chatgpt_kw_tiny"
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
@@ -72,7 +74,7 @@ train:
     learning_rate: 1.0e-5
     lr_warmup_steps: 0
     num_train_steps: 50000
-    accumulate_grad_batches: 2
+    accumulate_grad_batches: 1
 control:
   start_step: 0.1
   end_step: 0.8

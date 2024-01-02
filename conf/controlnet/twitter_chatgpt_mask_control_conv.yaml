@@ -1,6 +1,6 @@
 model:
   params:
-    max_seq_len: 64
+    max_seq_len: 96
     self_condition: False
     unconditional_prob: 0.1
   diffusion:
@@ -28,19 +28,19 @@ model:
       tx_dim: 768
       latent_dim: 768
       attention_head_dim: 64
-      max_seq_len: 64
+      max_seq_len: 96
       dropout: 0.1
       scale_shift: True
   sample:
     beam:
-      max_length: 64
+      max_length: 96
       min_length: 5
       do_sample: False
       num_beams: 4
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
     nucleus:
-      max_length: 64
+      max_length: 96
       min_length: 5
       do_sample: True
       top_p: 0.95
@@ -53,13 +53,15 @@ model:
       additional_input_key: "keyword_label_ids"
       additional_input_mask: "keyword_label_attention_mask"
       learning_rate: 1e-5
+      zero_init: "conv"
+      control_mean: False
       scale_factor: 0.119805
       scale_mean: 0.002614
 data:
   name: "chatgpt_kw_tiny"
   params:
     tokenizer: "huggingface/bart-base"
-    max_token_len: 64
+    max_token_len: 96
     batch_size: 128
     num_workers: 4
     kw_ratio: 0.15

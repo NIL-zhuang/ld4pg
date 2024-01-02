@@ -52,6 +52,7 @@ class DPMSolverSampler(object):
             dpm_method="multistep",
             dpm_order=2,
             dpm_lower_order_final=True,
+            return_intermediate=False,
             **kwargs
     ):
         if condition is not None:
@@ -98,6 +99,10 @@ class DPMSolverSampler(object):
         x = dpm_solver.sample(
             latent, steps=dpm_steps,
             skip_type=dpm_skip_type, method=dpm_method, order=dpm_order,
-            lower_order_final=dpm_lower_order_final, **kwargs
+            lower_order_final=dpm_lower_order_final,
+            return_intermediate=return_intermediate, **kwargs
         )
-        return x, []
+        if return_intermediate:
+            return x[0], x[1]
+        else:
+            return x, []

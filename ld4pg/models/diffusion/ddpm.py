@@ -529,7 +529,7 @@ class DiffusionWrapper(pl.LightningModule):
             latent_dim=dm_cfg.latent_dim,
             tx_depth=dm_cfg.tx_depth,
             heads=dm_cfg.latent_dim // dm_cfg.attention_head_dim,
-            # max_seq_len=dm_cfg.max_seq_len,  # 这一行注释比较奇怪，对qqp_base的模型要注释掉
+            max_seq_len=dm_cfg.max_seq_len,  # 这一行注释比较奇怪，对qqp_base的模型要注释掉
             dropout=dm_cfg.dropout,
             scale_shift=dm_cfg.scale_shift
         )

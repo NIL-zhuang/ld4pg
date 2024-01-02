@@ -70,6 +70,7 @@ def predict(model, data_loader, steps: int = 25, sampler='dpm'):
                 c, c_mask, x_mask, batch_size=c.shape[0],
                 sample_strategy=SAMPLE_STRATEGY['nucleus'],
                 verbose=False, sampler=sampler, steps=steps,
+                return_intermediate=True,
             )
             results += texts
     return results

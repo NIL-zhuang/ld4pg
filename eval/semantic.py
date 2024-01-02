@@ -19,7 +19,7 @@ def compute_bart_score(cands: List[str], refs: List[str]):
 
 def compute_mis_score(cand: List[str], refs: List[str]):
     mis = MIS(model_name="huggingface/mis", device='cuda' if torch.cuda.is_available() else 'cpu')
-    scores = mis.compute(cand, refs, verbose=True, batch_size=128)
+    scores = mis.compute(cand, refs, verbose=True, batch_size=512)
     return np.mean(scores)
 
 
@@ -27,7 +27,7 @@ def compute_bert_score(sentences: List[str], srcs: List[str]):
     bert_score = load("bertscore")
     scores = bert_score.compute(
         predictions=sentences, references=srcs, model_type="huggingface/deberta",
-        num_layers=9, verbose=False
+        num_layers=9, verbose=False, batch_size=512,
     )
     scores = scores['f1']
     return np.mean(scores)

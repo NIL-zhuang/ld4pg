@@ -52,24 +52,26 @@ model:
       cn_model: "huggingface/bart-base"
       additional_input_key: "keyword_label_ids"
       additional_input_mask: "keyword_label_attention_mask"
-      learning_rate: 1e-6
+      learning_rate: 1e-5
+      zero_init: "conv"
+      control_mean: False
       scale_factor: 0.119805
       scale_mean: 0.002614
 data:
-  name: "chatgpt_kw"
+  name: "qg"
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 128
+    batch_size: 192
     num_workers: 4
     kw_ratio: 0.15
-    special_token: "pad_token"
+    special_token: "mask_token"
 train:
-  name: "base"
+  name: "controlnet"
   output_dir: "saved_models"
   params:
     precision: 32
-    learning_rate: 1.0e-4
+    learning_rate: 1.0e-5
     lr_warmup_steps: 0
     num_train_steps: 50000
     accumulate_grad_batches: 1

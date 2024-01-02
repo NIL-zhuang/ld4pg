@@ -56,7 +56,7 @@ def main():
     src = ref_file['src'].tolist()
     ref = ref_file['tgt'].tolist()
     eval_results = {}
-    for filename in tqdm(sorted(glob(f"{args.cand_dir}/*.txt")), desc="Evaluating..."):
+    for filename in tqdm(sorted(glob(f"{args.cand_dir}/*.txt"), reverse=True), desc="Evaluating..."):
         print(f"\n\n evaluating {filename}...")
         with open(filename, 'r', encoding='utf-8') as f:
             cand = [line.strip() for line in f.readlines()]

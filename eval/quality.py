@@ -7,7 +7,8 @@ from sacrebleu import sentence_bleu
 
 
 def compute_bleu(refs: List[str], cands: List[str]):
-    bleu = load("bleu")
+    # bleu = load("bleu")
+    bleu = load("/home/data_91_d/zhuangzy/evaluate/metrics/bleu/bleu.py")
     results = bleu.compute(predictions=cands, references=refs)
     return results['bleu']
 
@@ -32,15 +33,18 @@ def compute_meteor(refs: List[str], cands: List[str]):
 
 
 def compute_rouge(refs: List[str], cands: List[str]):
-    rouge = load("rouge")
+    rouge = load("/home/data_91_d/zhuangzy/evaluate/metrics/rouge/rouge.py")
     results = rouge.compute(predictions=cands, references=refs)
     return results['rougeL']
 
 
 def compute_ppl(sentences: List[str], model_id="huggingface/gpt2"):
     perplexity = load("perplexity", module_type="metric")
-    results = perplexity.compute(predictions=sentences, model_id=model_id,
-                                 device='cuda' if torch.cuda.is_available() else 'cpu')
+    results = perplexity.compute(
+        predictions=sentences, model_id=model_id,
+        device='cuda' if torch.cuda.is_available() else 'cpu',
+        batch_size=256
+    )
     return results['mean_perplexity']
 
 
