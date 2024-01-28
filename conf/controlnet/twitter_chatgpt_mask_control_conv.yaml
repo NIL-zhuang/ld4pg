@@ -1,6 +1,7 @@
 model:
   params:
-    max_seq_len: 64
+    max_seq_len: 96
+    self_condition: False
     unconditional_prob: 0.1
   diffusion:
     params:
@@ -12,8 +13,8 @@ model:
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
-      scale_factor: 0.123292
-      scale_mean: 0.002169
+      scale_factor: 0.119805
+      scale_mean: 0.002614
       use_ema: True
       learn_logvar: False
       ema_decay: 0.9999
@@ -27,38 +28,53 @@ model:
       tx_dim: 768
       latent_dim: 768
       attention_head_dim: 64
-      max_seq_len: 64
+      max_seq_len: 96
       dropout: 0.1
       scale_shift: True
   sample:
     beam:
-      max_length: 64
+      max_length: 96
       min_length: 5
       do_sample: False
       num_beams: 4
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
     nucleus:
-      max_length: 64
+      max_length: 96
       min_length: 5
       do_sample: True
       top_p: 0.95
       num_beams: 1
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
+  controlnet:
+    params:
+      cn_model: "huggingface/bart-base"
+      additional_input_key: "keyword_label_ids"
+      additional_input_mask: "keyword_label_attention_mask"
+      learning_rate: 1e-5
+      zero_init: "conv"
+      control_mean: False
+      scale_factor: 0.119805
+      scale_mean: 0.002614
 data:
-  name: "twitter"
+  name: "chatgpt_kw_tiny"
   params:
     tokenizer: "huggingface/bart-base"
-    max_token_len: 64
+    max_token_len: 96
     batch_size: 128
     num_workers: 4
+    kw_ratio: 0.15
+    special_token: "mask_token"
 train:
-  name: ""
+  name: "base"
   output_dir: "saved_models"
   params:
     precision: 32
-    learning_rate: 1.0e-4
+    learning_rate: 1.0e-5
     lr_warmup_steps: 0
-    num_train_steps: 400000
+    num_train_steps: 50000
     accumulate_grad_batches: 1
+control:
+  start_step: 0.1
+  end_step: 0.8

@@ -14,9 +14,12 @@ from torch.optim import AdamW
 from tqdm import tqdm
 from transformers import BartForConditionalGeneration, BartTokenizerFast as BartTokenizer
 
-from ld4pg.data.data_module import get_dataset, DataModule
+from ld4pg.config import SAMPLE_STRATEGY
+from ld4pg.data import get_dataset
+from ld4pg.data.data_module import DataModule
 from ld4pg.util import arg_transform
 
+STRATEGY = "nucleus"
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 
@@ -31,6 +34,7 @@ def parse_args():
     parser.add_argument("--ckpt", type=str, default=None)
     parser.add_argument("--ckpt_dir", type=str, default=None)
     parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result.txt", help="target file path")
+    parser.add_argument("--fname", type=str, default=None, help="target file name")
     args = parser.parse_args()
     return args
 
@@ -129,12 +133,7 @@ class PLModel(pl.LightningModule):
         sentences = self.model.generate(
             inputs=input_ids,
             attention_mask=attention_mask,
-            max_length=64,
-            min_length=5,
-            do_sample=False,
-            num_beams=4,
-            no_repeat_ngram_size=3,
-            repetition_penalty=1.2
+
         )
         return sentences
 
@@ -193,12 +192,7 @@ def generate_text(model, tokenizer, dataloader):
             sentences = model.generate(
                 inputs=input_ids,
                 attention_mask=attention_mask,
-                max_length=64,
-                min_length=5,
-                do_sample=False,
-                num_beams=4,
-                no_repeat_ngram_size=3,
-                repetition_penalty=1.2
+                **SAMPLE_STRATEGY[STRATEGY],
             )
             sentences = tokenizer.batch_decode(sentences, skip_special_tokens=True, clean_up_tokenization_spaces=True)
             results += sentences
@@ -225,6 +219,8 @@ def predict(opt: argparse.Namespace):
     for m_path in tqdm(sorted(ckpt_list, reverse=True), desc="Evaluating models..."):
         # get model step, e.g. "step10000-val_ema123.45.ckpt" -> "step10000"
         m_name = os.path.splitext(os.path.split(m_path)[-1])[0].split('-')[0]
+        if opt.fname is not None:
+            m_name += f"-{opt.fname}"
         print(f"Evaluating {m_name}")
         model = load_model(cfg, m_path)
         results = generate_text(model, tokenizer, dataset.test_dataloader())

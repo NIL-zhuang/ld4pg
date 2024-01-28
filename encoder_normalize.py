@@ -4,7 +4,7 @@ from rich.progress import track
 from torch.utils.data import DataLoader, Dataset
 from transformers import BartForConditionalGeneration, AutoTokenizer
 
-from ld4pg.data.data_module import get_dataset
+from ld4pg.data import get_dataset
 
 
 class DatasetModule(Dataset):

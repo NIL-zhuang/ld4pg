@@ -10,7 +10,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
 from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
 
-from ld4pg.data.data_module import get_dataset, DataModule
+from ld4pg.data import get_dataset
+from ld4pg.data.data_module import DataModule
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
 from ld4pg.util import arg_transform
 
@@ -23,12 +24,14 @@ torch.backends.cudnn.allow_tf32 = True
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="conf/config_qqp.yaml", help="path to config which construct model")
+    parser.add_argument("--config", type=str, default="conf/config_qqp.yaml",
+                        help="path to config which construct model")
     parser.add_argument("--ckpt", type=str, default=None, help="path to model checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
     parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
+    parser.add_argument("--save_path", type=str, default="saved_models", help="path to save model")
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
@@ -114,7 +117,7 @@ def build_trainer(cfg, save_path="saved_models"):
             dirpath=save_path,
             monitor='val/loss_ema',
             filename='step{step}-valema{val/loss_ema:.2f}',
-            every_n_train_steps=20000,
+            every_n_train_steps=cfg.save_intervals if cfg.save_intervals is not None else 20000,
             auto_insert_metric_name=False,
             save_top_k=-1,
             save_on_train_epoch_end=True,
@@ -157,7 +160,11 @@ def main(opt: argparse.Namespace) -> None:
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
     if opt.mode == 'train':
-        save_path = get_save_path(cfg.train.output_dir, cfg.data.name, opt.name)
+        save_path = get_save_path(
+            cfg.train.output_dir if opt.save_path is None else opt.save_path,
+            cfg.data.name,
+            cfg.train.name if opt.name == '' else opt.name
+        )
     else:
         save_path = os.sep.join(opt.ckpt.split('/')[:2])
     print(f"Model save path: {save_path}")

@@ -1,0 +1,18 @@
+model:
+  base_model: "huggingface/bart-base"
+data:
+  name: "chatgpt"
+  params:
+    tokenizer: "huggingface/bart-base"
+    max_token_len: 64
+    batch_size: 192
+    num_workers: 4
+train:
+  name: ""
+  output_dir: "saved_models"
+  params:
+    precision: 32
+    learning_rate: 1.0e-4
+    lr_warmup_steps: 0
+    num_train_steps: 20000
+    accumulate_grad_batches: 1

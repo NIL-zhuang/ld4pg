@@ -17,7 +17,7 @@ class DPMSolverSampler(object):
         self.register_buffer("alphas_cumprod", model.alphas_cumprod)
 
     def register_buffer(self, name, attr):
-        attr = attr.clone().detach().to(torch.float32).to(self.model.device)
+        attr = attr.clone().detach().to(torch.float32).to(self.device)
         if type(attr) == torch.Tensor:
             if attr.device != self.device:
                 attr = attr.to(self.device)
@@ -30,8 +30,7 @@ class DPMSolverSampler(object):
             batch_size,
             shape,
             condition=None,
-            condition_mask=None,
-            latent_mask=None,
+            model_kwargs: dict = None,
             callback=None,
             normals_sequence=None,
             img_callback=None,
@@ -53,6 +52,7 @@ class DPMSolverSampler(object):
             dpm_method="multistep",
             dpm_order=2,
             dpm_lower_order_final=True,
+            return_intermediate=False,
             **kwargs
     ):
         if condition is not None:
@@ -79,7 +79,8 @@ class DPMSolverSampler(object):
             print(f'Data shape for DPM-Solver sampling is {size}, sampling steps {dpm_steps}')
 
         if x_T is None:
-            latent = torch.randn(size, device=self.model.betas.device)
+            # latent = torch.randn(size, device=self.model.betas.device)
+            latent = torch.randn(size, device=self.device)
         else:
             latent = x_T
 
@@ -90,7 +91,7 @@ class DPMSolverSampler(object):
             model_type=MODEL_TYPES[self.model.parameterization],
             guidance_type="classifier-free",
             condition=condition,
-            model_kwargs={'mask': latent_mask, 'cond_mask': condition_mask},
+            model_kwargs=model_kwargs,
             unconditional_condition=unconditional_conditioning,
             guidance_scale=unconditional_guidance_scale,
         )
@@ -98,6 +99,10 @@ class DPMSolverSampler(object):
         x = dpm_solver.sample(
             latent, steps=dpm_steps,
             skip_type=dpm_skip_type, method=dpm_method, order=dpm_order,
-            lower_order_final=dpm_lower_order_final, **kwargs
+            lower_order_final=dpm_lower_order_final,
+            return_intermediate=return_intermediate, **kwargs
         )
-        return x, []
+        if return_intermediate:
+            return x[0], x[1]
+        else:
+            return x, []

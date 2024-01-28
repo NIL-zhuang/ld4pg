@@ -11,7 +11,7 @@ from eval import (
     compute_bleu, compute_sentence_bleu, compute_sacrebleu,
     compute_meteor, compute_ppl, compute_ibleu, compute_rouge
 )
-from eval import compute_div_n, compute_self_bleu
+from eval import compute_div_n
 
 
 def parse_args():
@@ -44,10 +44,6 @@ def evaluate(cand: List[str], src: List[str], ref: List[str]):
     return results
 
 
-def evaluate_selfBLEU(cands: List[List[str]]):
-    print(f"selfBLEU: {compute_self_bleu(cands)}")
-
-
 def do_evaluate(cands: List[str], src: List[str], ref: List[str]):
     print(f"{'=' * 20}")
     result = evaluate(cands, src, ref)
@@ -60,7 +56,7 @@ def main():
     src = ref_file['src'].tolist()
     ref = ref_file['tgt'].tolist()
     eval_results = {}
-    for filename in tqdm(sorted(glob(f"{args.cand_dir}/*.txt")), desc="Evaluating..."):
+    for filename in tqdm(sorted(glob(f"{args.cand_dir}/*.txt"), reverse=True), desc="Evaluating..."):
         print(f"\n\n evaluating {filename}...")
         with open(filename, 'r', encoding='utf-8') as f:
             cand = [line.strip() for line in f.readlines()]

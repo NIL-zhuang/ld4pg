@@ -45,3 +45,6 @@ def arg_transform(v):
         return float(v)
     else:
         return v
+
+def disabled_train(self, mode=True):
+    return self

@@ -1,7 +1,8 @@
 model:
   params:
     max_seq_len: 64
-    unconditional_prob: 0.1
+    self_condition: False
+    unconditional_prob: 0.2
   diffusion:
     params:
       timesteps: 1000
@@ -12,8 +13,8 @@ model:
       condition_key: 'crossattn'
       ddim_sampling_eta: 1.0
       normalize: True
-      scale_factor: 0.123292
-      scale_mean: 0.002169
+      scale_factor: 0.121005
+      scale_mean: 0.002565
       use_ema: True
       learn_logvar: False
       ema_decay: 0.9999
@@ -47,18 +48,19 @@ model:
       no_repeat_ngram_size: 3
       repetition_penalty: 1.2
 data:
-  name: "twitter"
+  name: "qqp"
   params:
     tokenizer: "huggingface/bart-base"
     max_token_len: 64
-    batch_size: 128
+    batch_size: 192
     num_workers: 4
 train:
-  name: ""
+  name: "ldp"
   output_dir: "saved_models"
   params:
     precision: 32
     learning_rate: 1.0e-4
     lr_warmup_steps: 0
-    num_train_steps: 400000
+    num_train_steps: 240000
+    save_intervals: 30000
     accumulate_grad_batches: 1

@@ -3,7 +3,7 @@ datasets
 huggingface
 .idea
 scripts/baseline_process.py
-
+scripts/
 __pycache__/
 *.py[cod]
 *$py.class
