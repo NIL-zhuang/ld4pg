@@ -7,13 +7,15 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
 from tqdm import tqdm
-from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
+from transformers import (AutoTokenizer, BartForConditionalGeneration,
+                          BartTokenizer)
 
 from ld4pg.config import *
 from ld4pg.data import get_dataset
 from ld4pg.data.controlnet_data_module import ControlNetKeywordDataModule
 from ld4pg.models.control_net.controlnet import ControlNetModel
-from ld4pg.models.control_net.controlnet_inference_pipeline import LDPControlnetInferencePipeline
+from ld4pg.models.control_net.controlnet_inference_pipeline import \
+    LDPControlnetInferencePipeline
 from ld4pg.models.control_net.controlnet_pipeline import LDPControlNetPipeline
 from ld4pg.models.diffusion.ddpm import LatentDiffusion
 from ld4pg.util import arg_transform
@@ -42,7 +44,7 @@ def parse_args():
     parser.add_argument("--ckpt_dir", type=str, default=None, help="path to model checkpoint save dir")
     parser.add_argument("--ldp", type=str, default=None, help="path to ldp model checkpoint")
     parser.add_argument("--seed", type=int, default=42, help="the seed (for reproducible results)")
-    parser.add_argument("--tgt", type=str, default="/home/zhuangzy/result", help="target file dir")
+    parser.add_argument("--tgt", type=str, default=None, help="target file dir")
     parser.add_argument("--fname", type=str, default=None, help="target file name")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
     args = parser.parse_args()
