@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
     parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
-    parser.add_argument("--save_path", type=str, default="saved_models", help="path to save model")
+    parser.add_argument("--save_path", type=str, default=None, help="path to save model")
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
