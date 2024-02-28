@@ -16,7 +16,7 @@ class DatasetModule(Dataset):
             tokenizer: PreTrainedTokenizer,
             cfg
     ):
-        if (("src_max_token_len" in cfg or "tgt_max_token_len" in cfg) and 
+        if (("src_max_token_len" not in cfg or "tgt_max_token_len" not in cfg) and 
             # (cfg.src_max_token_len is None or cfg.tgt_max_token_len is None) and
             cfg.max_token_len is not None
         ):

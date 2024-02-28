@@ -8,4 +8,6 @@ transformers
 omegaconf
 einops
 rich
+tensorboard
+tensorboardX
 
