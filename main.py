@@ -8,7 +8,7 @@ from omegaconf import OmegaConf, DictConfig
 from pytorch_lightning import loggers as pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
-from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
+from transformers import AutoTokenizer,AutoModelForSeq2SeqLM
 
 from ld4pg.data import get_dataset
 from ld4pg.data.data_module import DataModule
@@ -58,8 +58,8 @@ def build_dataset(cfg: DictConfig):
 
 def build_model(cfg: DictConfig):
     diffusion_cfg = cfg.diffusion.params
-    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
-    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_model = AutoModelForSeq2SeqLM.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = AutoTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
     model = LatentDiffusion(
         model_cfg=cfg.transformer,
         first_stage_model=first_stage_model,
@@ -85,8 +85,8 @@ def build_model(cfg: DictConfig):
 
 def load_model(cfg: DictConfig, ckpt: str):
     diffusion_cfg = cfg.diffusion.params
-    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
-    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_model = AutoModelForSeq2SeqLM.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = AutoTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
     model = LatentDiffusion.load_from_checkpoint(
         ckpt,
         first_stage_model=first_stage_model,
@@ -158,7 +158,6 @@ def main(opt: argparse.Namespace) -> None:
     for param in opt.update:
         k, v = param.split("=")
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
-
     if opt.mode == 'train':
         save_path = get_save_path(
             cfg.train.output_dir if opt.save_path is None else opt.save_path,

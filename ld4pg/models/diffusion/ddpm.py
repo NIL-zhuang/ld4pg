@@ -313,7 +313,8 @@ class LatentDiffusion(pl.LightningModule):
             condition = encoder(condition, attention_mask=mask).last_hidden_state
             return condition, mask
 
-        embeddings = encoder.embed_tokens(condition) * encoder.embed_scale
+        embed_scale = encoder.embed_scale if hasattr(encoder, "embed_scale") else 1.0
+        embeddings = encoder.embed_tokens(condition) * embed_scale
         unconditional_embedding = repeat(
             self.unconditional_token_emb, 'd -> b s d', b=condition.shape[0],
             s=condition.shape[1]

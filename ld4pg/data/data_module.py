@@ -16,9 +16,8 @@ class DatasetModule(Dataset):
             tokenizer: PreTrainedTokenizer,
             cfg
     ):
-        if (("src_max_token_len" not in cfg or "tgt_max_token_len" not in cfg) and 
-            # (cfg.src_max_token_len is None or cfg.tgt_max_token_len is None) and
-            cfg.max_token_len is not None
+        if (  ("src_max_token_len" not in cfg or "tgt_max_token_len" not in cfg) and 
+                cfg.max_token_len is not None
         ):
             source_max_token_len = cfg.max_token_len
             target_max_token_len = cfg.max_token_len
@@ -26,9 +25,11 @@ class DatasetModule(Dataset):
             source_max_token_len = cfg.src_max_token_len
             target_max_token_len = cfg.tgt_max_token_len
         self.data = data
+        self.src_prompt = cfg.src_prompt if "src_prompt" in cfg else ""
+        self.tgt_prompt = cfg.tgt.prompt if "tgt_prompt" in cfg else ""
 
         self.source = tokenizer(
-            data['src'].tolist(),
+            [self.src_prompt+l for l in data['src'].tolist()],
             max_length=source_max_token_len,
             padding='max_length',
             truncation=True,
@@ -37,7 +38,7 @@ class DatasetModule(Dataset):
             add_special_tokens=True
         )
         self.target = tokenizer(
-            data['tgt'].tolist(),
+            [self.tgt_prompt+l for l in data['tgt'].tolist()],
             max_length=target_max_token_len,
             padding='max_length',
             truncation=True,
