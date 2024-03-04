@@ -8,7 +8,7 @@ from omegaconf import OmegaConf, DictConfig
 from pytorch_lightning import loggers as pl_logger
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from pytorch_lightning.strategies import DDPStrategy
-from transformers import AutoTokenizer, BartForConditionalGeneration, BartTokenizer
+from transformers import AutoTokenizer,AutoModelForSeq2SeqLM
 
 from ld4pg.data import get_dataset
 from ld4pg.data.data_module import DataModule
@@ -31,7 +31,7 @@ def parse_args():
     parser.add_argument("-n", "--name", type=str, default="", help="postfix for dir")
     parser.add_argument("--tgt", type=str, default="result.txt", help="target file path")
     parser.add_argument("-u", "--update", nargs='+', default=[], help='update parameters')
-    parser.add_argument("--save_path", type=str, default="saved_models", help="path to save model")
+    parser.add_argument("--save_path", type=str, default=None, help="path to save model")
     parser.add_argument(
         "-m", "--mode", type=str, default='eval',
         choices=['train', 'eval', 'resume', 'interact'],
@@ -58,8 +58,8 @@ def build_dataset(cfg: DictConfig):
 
 def build_model(cfg: DictConfig):
     diffusion_cfg = cfg.diffusion.params
-    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
-    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_model = AutoModelForSeq2SeqLM.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = AutoTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
     model = LatentDiffusion(
         model_cfg=cfg.transformer,
         first_stage_model=first_stage_model,
@@ -85,8 +85,8 @@ def build_model(cfg: DictConfig):
 
 def load_model(cfg: DictConfig, ckpt: str):
     diffusion_cfg = cfg.diffusion.params
-    first_stage_model = BartForConditionalGeneration.from_pretrained(diffusion_cfg.enc_dec_model)
-    first_stage_tokenizer = BartTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_model = AutoModelForSeq2SeqLM.from_pretrained(diffusion_cfg.enc_dec_model)
+    first_stage_tokenizer = AutoTokenizer.from_pretrained(diffusion_cfg.enc_dec_model)
     model = LatentDiffusion.load_from_checkpoint(
         ckpt,
         first_stage_model=first_stage_model,
@@ -117,7 +117,7 @@ def build_trainer(cfg, save_path="saved_models"):
             dirpath=save_path,
             monitor='val/loss_ema',
             filename='step{step}-valema{val/loss_ema:.2f}',
-            every_n_train_steps=cfg.save_intervals if cfg.save_intervals is not None else 20000,
+            every_n_train_steps=cfg.save_intervals if "save_intervals" in cfg else 20000,
             auto_insert_metric_name=False,
             save_top_k=-1,
             save_on_train_epoch_end=True,
@@ -158,7 +158,6 @@ def main(opt: argparse.Namespace) -> None:
     for param in opt.update:
         k, v = param.split("=")
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
-
     if opt.mode == 'train':
         save_path = get_save_path(
             cfg.train.output_dir if opt.save_path is None else opt.save_path,

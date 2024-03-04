@@ -12,7 +12,7 @@ from pytorch_lightning.strategies import DDPStrategy
 from rich.progress import track
 from torch.optim import AdamW
 from tqdm import tqdm
-from transformers import BartForConditionalGeneration, BartTokenizerFast as BartTokenizer
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 from ld4pg.config import SAMPLE_STRATEGY
 from ld4pg.data import get_dataset
@@ -40,7 +40,7 @@ def parse_args():
 
 
 def build_dataset_same(cfg: DictConfig):
-    tokenizer = BartTokenizer.from_pretrained(cfg.params.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.params.tokenizer)
     dataset = get_dataset(cfg.name)
     # concat train, valid & test dataset into finetune
     train_dataset = pd.concat([dataset[0], dataset[1], dataset[2]])
@@ -63,7 +63,7 @@ def build_dataset_same(cfg: DictConfig):
 
 
 def build_dataset(cfg: DictConfig):
-    tokenizer = BartTokenizer.from_pretrained(cfg.params.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.params.tokenizer)
     dataset = get_dataset(cfg.name)
     dataset_module = DataModule(
         cfg=cfg.params,
@@ -99,7 +99,7 @@ class HFTrainer(pl.Trainer):
 
 
 class PLModel(pl.LightningModule):
-    def __init__(self, model: BartForConditionalGeneration):
+    def __init__(self, model: AutoModelForSeq2SeqLM):
         super().__init__()
         self.model = model
 
@@ -174,7 +174,7 @@ def build_trainer(cfg, save_path="saved_models"):
 
 def load_model(cfg, ckpt: str):
     model_path = cfg.model.diffusion.params.enc_dec_model
-    model = BartForConditionalGeneration.from_pretrained(model_path)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
     pl_model = PLModel.load_from_checkpoint(ckpt, model=model)
     pl_model.eval()
     pl_model.freeze()
@@ -207,7 +207,7 @@ def predict(opt: argparse.Namespace):
         OmegaConf.update(cfg, k, arg_transform(v), merge=True)
 
     dataset = build_dataset(cfg.data)
-    tokenizer = BartTokenizer.from_pretrained(cfg.data.params.tokenizer)
+    tokenizer = AutoTokenizer.from_pretrained(cfg.data.params.tokenizer)
     if opt.ckpt is not None:
         ckpt_list = [opt.ckpt]
     elif opt.ckpt_dir is not None:
@@ -237,7 +237,7 @@ def train(opt: argparse.Namespace):
 
     dataset = build_dataset(cfg.data)
     model_path = cfg.model.diffusion.params.enc_dec_model
-    model = BartForConditionalGeneration.from_pretrained(model_path)
+    model = AutoModelForSeq2SeqLM.from_pretrained(model_path)
     pl_model = PLModel(model)
 
     save_path = get_save_path("saved_models/bart_ft", cfg.data.name, os.path.split(model_path)[1])
