@@ -31,3 +31,16 @@ Use `controlnet_train.py`
 ### Controlnet Inference
 * `--ldp` refers to the original ldp checkpoint path
 * `--ckpt_dir` meaning the checkpoint directory
+
+## Citation
+
+If you find the code helpful, please cite
+
+```text
+@article{zou2024enforcing,
+  title={Enforcing Paraphrase Generation via Controllable Latent Diffusion},
+  author={Zou, Wei and Zhuang, Ziyuan and Huang, Shujian and Liu, Jia and Chen, Jiajun},
+  journal={arXiv preprint arXiv:2404.08938},
+  year={2024}
+}
+```
